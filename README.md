@@ -19,6 +19,6 @@ Computer Science student at **UFFS** and Mechatronics Technician (**IFRS**). I s
 *  Developing automation and robotics projects.
 *  Deepening CS fundamentals at University.
 
-### 📫 Connect with me
+###  Connect with me
 * **Location:** Erechim, RS - Brazil 🇧🇷
 
