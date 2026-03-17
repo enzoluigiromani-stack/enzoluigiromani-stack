@@ -21,4 +21,18 @@ Computer Science student at **UFFS** and Mechatronics Technician (**IFRS**). I s
 
 ###  Connect with me
 * **Location:** Erechim, RS - Brazil 🇧🇷
-
+* 
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>🤖 Dual-Joystick Collector</h4>
+      <p>Bluetooth-controlled robot with dual-servo systems for object retrieval.</p>
+      <a href="https://github.com/enzoluigiromani-stack/dual-joystick-robotic-collector">View Project →</a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>🛤️ Smart Line Follower</h4>
+      <p>Autonomous robot with track-loss recovery logic and sensor memory.</p>
+      <a href="https://github.com/enzoluigiromani-stack/line-follower-memory-logic">View Project →</a>
+    </td>
+  </tr>
+</table>
