@@ -3,9 +3,9 @@
 <p align="left">
   <img src="https://img.shields.io/badge/C%2B%2B-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white" />
   <img src="https://img.shields.io/badge/Arduino-00979D?style=for-the-badge&logo=arduino&logoColor=white" />
+  <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/English-B2_First-blue?style=for-the-badge" />
 </p>
-
 ###  About Me
 Computer Science student at **UFFS** and Mechatronics Technician (**IFRS**). I specialize in C++, Arduino, and hardware-software integration, focusing on building efficient automation solutions.
 
