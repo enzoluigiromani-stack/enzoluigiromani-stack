@@ -21,7 +21,7 @@ Computer Science student at **UFFS** and Mechatronics Technician (**IFRS**). I s
 
 ###  Connect with me
 * **Location:** Erechim, RS - Brazil 🇧🇷
-* 
+  
 <table>
   <tr>
     <td width="50%" valign="top">
