@@ -6,13 +6,23 @@ from twilio.rest import Client
 
 logger = logging.getLogger(__name__)
 
-# Etapas que disparam notificação de avanço no pipeline
 STAGES_TO_NOTIFY = {"qualificado", "proposta", "fechado"}
+
+
+def _sandbox() -> bool:
+    return os.getenv("NOTIFICATIONS_SANDBOX", "false").lower() == "true"
 
 
 # ── Primitivas ────────────────────────────────────────────────────────────────
 
 def send_email(to: str, subject: str, html_body: str) -> bool:
+    if _sandbox():
+        print(f"\n[SANDBOX] E-MAIL")
+        print(f"  Para:    {to}")
+        print(f"  Assunto: {subject}")
+        print(f"  Corpo:   {html_body.strip()}\n")
+        return True
+
     api_key    = os.getenv("SENDGRID_API_KEY")
     from_email = os.getenv("EMAIL_FROM")
     if not api_key or not from_email:
@@ -30,6 +40,12 @@ def send_email(to: str, subject: str, html_body: str) -> bool:
 
 
 def send_sms(to: str, body: str) -> bool:
+    if _sandbox():
+        print(f"\n[SANDBOX] SMS")
+        print(f"  Para:    {to}")
+        print(f"  Mensagem: {body}\n")
+        return True
+
     sid        = os.getenv("TWILIO_ACCOUNT_SID")
     token      = os.getenv("TWILIO_AUTH_TOKEN")
     from_phone = os.getenv("TWILIO_PHONE")
@@ -50,19 +66,18 @@ def send_sms(to: str, body: str) -> bool:
 
 def notify_new_lead(lead) -> None:
     """Dispara ao criar um lead novo: e-mail para a equipe + SMS de boas-vindas ao lead."""
-    notify_email = os.getenv("NOTIFY_EMAIL")
-    if notify_email:
-        send_email(
-            to=notify_email,
-            subject=f"Novo lead: {lead.name}",
-            html_body=f"""
-                <h2>Novo lead cadastrado</h2>
-                <p><strong>Nome:</strong> {lead.name}</p>
-                <p><strong>E-mail:</strong> {lead.email}</p>
-                <p><strong>Telefone:</strong> {lead.phone or '—'}</p>
-                <p><strong>Origem:</strong> {lead.source or '—'}</p>
-            """,
-        )
+    notify_email = os.getenv("NOTIFY_EMAIL", "equipe@agencia.com")
+    send_email(
+        to=notify_email,
+        subject=f"Novo lead: {lead.name}",
+        html_body=f"""
+            <h2>Novo lead cadastrado</h2>
+            <p><strong>Nome:</strong> {lead.name}</p>
+            <p><strong>E-mail:</strong> {lead.email}</p>
+            <p><strong>Telefone:</strong> {lead.phone or '—'}</p>
+            <p><strong>Origem:</strong> {lead.source or '—'}</p>
+        """,
+    )
 
     if lead.phone:
         send_sms(
@@ -76,25 +91,22 @@ def notify_lead_moved(lead, stage_name: str) -> None:
     if stage_name not in STAGES_TO_NOTIFY:
         return
 
-    notify_email = os.getenv("NOTIFY_EMAIL")
-    if notify_email:
-        send_email(
-            to=notify_email,
-            subject=f"Lead '{lead.name}' avançou para '{stage_name}'",
-            html_body=f"""
-                <h2>Lead avançou no pipeline</h2>
-                <p><strong>Nome:</strong> {lead.name}</p>
-                <p><strong>E-mail:</strong> {lead.email}</p>
-                <p><strong>Telefone:</strong> {lead.phone or '—'}</p>
-                <p><strong>Nova etapa:</strong> <strong>{stage_name}</strong></p>
-            """,
-        )
+    notify_email = os.getenv("NOTIFY_EMAIL", "equipe@agencia.com")
+    send_email(
+        to=notify_email,
+        subject=f"Lead '{lead.name}' avançou para '{stage_name}'",
+        html_body=f"""
+            <h2>Lead avançou no pipeline</h2>
+            <p><strong>Nome:</strong> {lead.name}</p>
+            <p><strong>E-mail:</strong> {lead.email}</p>
+            <p><strong>Telefone:</strong> {lead.phone or '—'}</p>
+            <p><strong>Nova etapa:</strong> <strong>{stage_name}</strong></p>
+        """,
+    )
 
-    # SMS para a equipe apenas quando o negócio é fechado
     if stage_name == "fechado":
-        notify_phone = os.getenv("NOTIFY_PHONE")
-        if notify_phone:
-            send_sms(
-                to=notify_phone,
-                body=f"Negócio fechado! Lead: {lead.name} ({lead.email})",
-            )
+        notify_phone = os.getenv("NOTIFY_PHONE", "+5511999990000")
+        send_sms(
+            to=notify_phone,
+            body=f"Negócio fechado! Lead: {lead.name} ({lead.email})",
+        )
