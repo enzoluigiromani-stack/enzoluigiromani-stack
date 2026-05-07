@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, ForeignKey, Integer, String, DateTime
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, DateTime
 from sqlalchemy.orm import relationship
 from app.database.database import Base
 
@@ -14,6 +14,7 @@ class Lead(Base):
     source = Column(String, nullable=True)
     status = Column(String, default="novo")
     stage_id = Column(Integer, ForeignKey("pipeline_stages.id"), nullable=True)
+    budget = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=True)
 

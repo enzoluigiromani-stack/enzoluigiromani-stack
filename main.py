@@ -1,5 +1,8 @@
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
+
+import logging
+logging.basicConfig(level=logging.INFO)
 
 from fastapi import FastAPI
 from sqlalchemy import text
@@ -15,6 +18,9 @@ def _migrate():
         cols = [r[1] for r in conn.execute(text("PRAGMA table_info(leads)"))]
         if "stage_id" not in cols:
             conn.execute(text("ALTER TABLE leads ADD COLUMN stage_id INTEGER"))
+            conn.commit()
+        if "budget" not in cols:
+            conn.execute(text("ALTER TABLE leads ADD COLUMN budget REAL"))
             conn.commit()
 
 

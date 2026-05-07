@@ -17,10 +17,7 @@ def _sandbox() -> bool:
 
 def send_email(to: str, subject: str, html_body: str) -> bool:
     if _sandbox():
-        print(f"\n[SANDBOX] E-MAIL")
-        print(f"  Para:    {to}")
-        print(f"  Assunto: {subject}")
-        print(f"  Corpo:   {html_body.strip()}\n")
+        logger.info("[SANDBOX] E-MAIL | Para: %s | Assunto: %s", to, subject)
         return True
 
     api_key    = os.getenv("SENDGRID_API_KEY")
@@ -76,6 +73,7 @@ def notify_new_lead(lead) -> None:
             <p><strong>E-mail:</strong> {lead.email}</p>
             <p><strong>Telefone:</strong> {lead.phone or '—'}</p>
             <p><strong>Origem:</strong> {lead.source or '—'}</p>
+            <p><strong>Investimento:</strong> {f"R$ {lead.budget:,.2f}" if lead.budget else "—"}</p>
         """,
     )
 

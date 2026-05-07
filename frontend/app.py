@@ -61,6 +61,7 @@ with st.sidebar:
             "Origem",
             ["", "site", "facebook", "instagram", "google", "indicacao", "outro"],
         )
+        budget   = st.number_input("Investimento Estimado (R$)", min_value=0.0, step=100.0, format="%.2f")
         enviado = st.form_submit_button(
             "Adicionar Lead", use_container_width=True, type="primary"
         )
@@ -75,6 +76,8 @@ with st.sidebar:
                     payload["phone"] = telefone
                 if origem:
                     payload["source"] = origem
+                if budget:
+                    payload["budget"] = budget
                 result = create_lead(payload)
                 st.success(result.get("message", "Lead adicionado!"))
                 st.rerun()
@@ -91,7 +94,7 @@ board = get_board()
 if not board:
     st.error(
         "Não foi possível conectar à API. "
-        "Verifique se o servidor está rodando em http://localhost:8000"
+        "Verifique se o servidor está rodando em http://localhost:8001"
     )
     st.stop()
 
@@ -140,6 +143,7 @@ for i, item in enumerate(board):
         for lead in stage_leads:
             phone_line  = f'<div class="lead-info">📞 {lead["phone"]}</div>' if lead.get("phone") else ""
             source_line = f'<span class="badge">📍 {lead["source"]}</span>'  if lead.get("source") else ""
+            budget_line = f'<span class="badge">💰 R$ {lead["budget"]:,.2f}</span>' if lead.get("budget") else ""
 
             st.markdown(
                 f'<div class="lead-card">'
@@ -147,6 +151,7 @@ for i, item in enumerate(board):
                 f'  <div class="lead-info">✉️ {lead["email"]}</div>'
                 f'  {phone_line}'
                 f'  {source_line}'
+                f'  {budget_line}'
                 f'</div>',
                 unsafe_allow_html=True,
             )

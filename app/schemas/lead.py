@@ -10,6 +10,7 @@ class LeadBase(BaseModel):
     phone: Optional[str] = None
     source: Optional[str] = None
     status: Optional[str] = "novo"
+    budget: Optional[float] = None
 
 
 class LeadCreate(LeadBase):
@@ -21,6 +22,7 @@ class LeadUpdate(BaseModel):
     phone: Optional[str] = None
     source: Optional[str] = None
     status: Optional[str] = None
+    budget: Optional[float] = None
 
 
 class LeadMoveRequest(BaseModel):
