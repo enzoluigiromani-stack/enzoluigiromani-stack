@@ -1,12 +1,13 @@
 from datetime import datetime
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.models.lead import Lead
 from app.models.pipeline_stage import PipelineStage
 from app.schemas.lead import LeadCreate, LeadMoveRequest, LeadUpdate, LeadResponse
+from app.services.notifications import notify_new_lead, notify_lead_moved
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -36,8 +37,10 @@ def _upsert_lead(db: Session, email: str, data: dict) -> tuple[Lead, bool]:
 
 
 @router.post("/")
-def create_lead(lead: LeadCreate, db: Session = Depends(get_db)):
+def create_lead(lead: LeadCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     db_lead, criado = _upsert_lead(db, lead.email, lead.model_dump())
+    if criado:
+        background_tasks.add_task(notify_new_lead, db_lead)
     mensagem = "Lead criado" if criado else "Lead atualizado"
     return {"message": mensagem, "lead": jsonable_encoder(LeadResponse.model_validate(db_lead))}
 
@@ -69,7 +72,7 @@ def update_lead(lead_id: int, data: LeadUpdate, db: Session = Depends(get_db)):
 
 
 @router.patch("/{lead_id}/move")
-def move_lead(lead_id: int, body: LeadMoveRequest, db: Session = Depends(get_db)):
+def move_lead(lead_id: int, body: LeadMoveRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead não encontrado")
@@ -80,6 +83,7 @@ def move_lead(lead_id: int, body: LeadMoveRequest, db: Session = Depends(get_db)
     lead.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(lead)
+    background_tasks.add_task(notify_lead_moved, lead, stage.name)
     return {
         "message": f"Lead movido para '{stage.name}'",
         "lead_id": lead_id,

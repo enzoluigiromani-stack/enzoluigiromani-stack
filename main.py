@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from sqlalchemy import text
 from app.database.database import Base, engine, SessionLocal
