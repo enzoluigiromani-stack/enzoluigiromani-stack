@@ -1,9 +1,10 @@
-# CRM API
+# CRM Agência
 
-API REST para gerenciamento de leads com pipeline de vendas estilo Kanban, construída com FastAPI e SQLite.
+API REST para gerenciamento de leads com pipeline de vendas estilo Kanban e dashboard visual, construída com FastAPI, SQLite e Streamlit.
 
 ## Tecnologias
 
+**Backend**
 - Python 3.10+
 - FastAPI
 - SQLAlchemy
@@ -11,13 +12,21 @@ API REST para gerenciamento de leads com pipeline de vendas estilo Kanban, const
 - SQLite
 - Uvicorn
 
+**Frontend**
+- Streamlit
+- Requests
+- Pandas
+
 ## Instalação
 
 ```bash
 pip install -r requirements.txt
+pip install streamlit requests pandas
 ```
 
 ## Executando
+
+### 1. Backend (API)
 
 ```bash
 uvicorn main:app --reload
@@ -26,6 +35,42 @@ uvicorn main:app --reload
 A API sobe em `http://localhost:8000`. Documentação interativa em `http://localhost:8000/docs`.
 
 Na primeira execução, o banco é criado automaticamente e as 6 etapas padrão do pipeline são inseridas via seed.
+
+### 2. Frontend (Dashboard)
+
+Em um segundo terminal, na pasta raiz do projeto:
+
+```bash
+streamlit run frontend/app.py
+```
+
+O dashboard abre automaticamente em `http://localhost:8501`.
+
+> **Atenção:** por padrão o frontend aponta para `http://localhost:8000`. Se o backend estiver em outra porta, edite `API_URL` em `frontend/api.py`.
+
+### Estrutura de pastas
+
+```
+crm/
+├── main.py                  # Entrypoint da API
+├── requirements.txt
+├── app/
+│   ├── api/
+│   │   ├── leads.py         # Endpoints de leads
+│   │   ├── pipeline.py      # Endpoints do pipeline
+│   │   └── webhook.py       # Endpoint de webhook
+│   ├── models/
+│   │   ├── lead.py
+│   │   └── pipeline_stage.py
+│   ├── schemas/
+│   │   ├── lead.py
+│   │   └── pipeline_stage.py
+│   └── database/
+│       └── database.py
+└── frontend/
+    ├── app.py               # Interface Streamlit
+    └── api.py               # Cliente da API
+```
 
 ---
 
