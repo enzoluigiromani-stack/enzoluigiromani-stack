@@ -2,11 +2,14 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
+
 from app.database.database import get_db
 from app.models.lead import Lead
 from app.models.pipeline_stage import PipelineStage
+from app.models.user import User
 from app.schemas.lead import LeadResponse
 from app.schemas.pipeline_stage import PipelineStageCreate, PipelineStageResponse
+from app.services.auth import get_current_user
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
@@ -17,7 +20,11 @@ def list_stages(db: Session = Depends(get_db)):
 
 
 @router.post("/stages", response_model=PipelineStageResponse, status_code=status.HTTP_201_CREATED)
-def create_stage(stage: PipelineStageCreate, db: Session = Depends(get_db)):
+def create_stage(
+    stage: PipelineStageCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     if db.query(PipelineStage).filter(PipelineStage.name == stage.name).first():
         raise HTTPException(status_code=409, detail=f"Etapa '{stage.name}' já existe")
     db_stage = PipelineStage(**stage.model_dump())
@@ -28,14 +35,21 @@ def create_stage(stage: PipelineStageCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/board")
-def get_board(db: Session = Depends(get_db)):
+def get_board(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     stages = db.query(PipelineStage).order_by(PipelineStage.order).all()
     board = []
     for stage in stages:
-        leads = db.query(Lead).filter(Lead.stage_id == stage.id).all()
+        leads = (
+            db.query(Lead)
+            .filter(Lead.stage_id == stage.id, Lead.user_id == current_user.id)
+            .all()
+        )
         board.append({
             "stage": jsonable_encoder(PipelineStageResponse.model_validate(stage)),
             "total": len(leads),
             "leads": [jsonable_encoder(LeadResponse.model_validate(l)) for l in leads],
         })
-    return {"board": board}
+    return board

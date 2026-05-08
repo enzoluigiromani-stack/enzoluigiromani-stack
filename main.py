@@ -9,18 +9,32 @@ from sqlalchemy import text
 from app.database.database import Base, engine, SessionLocal
 from app.models import pipeline_stage  # registra PipelineStage no Base antes do create_all
 from app.models import lead             # registra Lead no Base antes do create_all
-from app.api import leads, webhook, pipeline
+from app.models import user             # registra User no Base antes do create_all
+from app.api import leads, webhook, pipeline, auth
 
 
 def _migrate():
     """Adiciona colunas novas em tabelas existentes (SQLite não suporta Alembic aqui)."""
     with engine.connect() as conn:
-        cols = [r[1] for r in conn.execute(text("PRAGMA table_info(leads)"))]
-        if "stage_id" not in cols:
+        # leads
+        lead_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(leads)"))]
+        if "stage_id" not in lead_cols:
             conn.execute(text("ALTER TABLE leads ADD COLUMN stage_id INTEGER"))
             conn.commit()
-        if "budget" not in cols:
+        if "budget" not in lead_cols:
             conn.execute(text("ALTER TABLE leads ADD COLUMN budget REAL"))
+            conn.commit()
+        if "user_id" not in lead_cols:
+            conn.execute(text("ALTER TABLE leads ADD COLUMN user_id INTEGER"))
+            conn.commit()
+
+        # users
+        user_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(users)"))]
+        if "name" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN name VARCHAR"))
+            conn.commit()
+        if "is_admin" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
             conn.commit()
 
 
@@ -55,6 +69,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
+app.include_router(auth.router)
 app.include_router(leads.router)
 app.include_router(webhook.router)
 app.include_router(pipeline.router)
