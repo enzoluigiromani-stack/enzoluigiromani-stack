@@ -2,7 +2,9 @@ import os
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
+
 from app.database.database import get_db
+from app.models.workspace import Workspace
 from app.schemas.lead import LeadCreate, LeadResponse
 from app.api.leads import _upsert_lead
 
@@ -11,23 +13,26 @@ router = APIRouter(prefix="/webhook", tags=["webhook"])
 _SECRET = os.getenv("WEBHOOK_SECRET", "")
 
 
-@router.post("/leads", status_code=status.HTTP_200_OK)
+@router.post("/leads/{workspace_slug}", status_code=status.HTTP_200_OK)
 def webhook_lead(
+    workspace_slug: str,
     payload: LeadCreate,
     db: Session = Depends(get_db),
     x_webhook_secret: str | None = Header(default=None),
 ):
     """
     Recebe leads de fontes externas (formulários, Facebook Lead Ads, etc.).
-    - Se o e-mail já existe: atualiza os dados e retorna acao='atualizado'.
-    - Se é novo: cria o lead e retorna acao='criado'.
-    - Proteção opcional: envie o header X-Webhook-Secret com o valor da
-      variável de ambiente WEBHOOK_SECRET.
+    O workspace é identificado pelo slug na URL: POST /webhook/leads/{workspace_slug}
     """
     if _SECRET and x_webhook_secret != _SECRET:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
 
-    lead, criado = _upsert_lead(db, payload.email, payload.model_dump())
+    workspace = db.query(Workspace).filter(Workspace.slug == workspace_slug).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado")
+
+    data = {**payload.model_dump(), "workspace_id": workspace.id}
+    lead, criado = _upsert_lead(db, payload.email, workspace.id, data)
     return {
         "status": "ok",
         "acao": "criado" if criado else "atualizado",

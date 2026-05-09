@@ -7,17 +7,45 @@ logging.basicConfig(level=logging.INFO)
 from fastapi import FastAPI
 from sqlalchemy import text
 from app.database.database import Base, engine, SessionLocal
-from app.models import pipeline_stage  # registra PipelineStage no Base antes do create_all
-from app.models import lead             # registra Lead no Base antes do create_all
-from app.models import user             # registra User no Base antes do create_all
-from app.api import leads, webhook, pipeline, auth
+from app.models import workspace   # noqa: F401  registra Workspace no Base
+from app.models import pipeline_stage  # noqa: F401  registra PipelineStage
+from app.models import lead        # noqa: F401  registra Lead
+from app.models import user        # noqa: F401  registra User
+from app.api import leads, webhook, pipeline, auth, workspace as workspace_router
 
 
-def _migrate():
-    """Adiciona colunas novas em tabelas existentes (SQLite não suporta Alembic aqui)."""
+def _drop_stale_tables():
+    """
+    Na primeira execução do esquema multi-tenant (antes de existir a tabela workspaces),
+    descarta leads e pipeline_stages para recriá-los com o novo schema correto.
+    Dados antigos sem workspace_id não têm utilidade.
+    """
     with engine.connect() as conn:
-        # leads
-        lead_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(leads)"))]
+        tables = {r[0] for r in conn.execute(text(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ))}
+        if "workspaces" not in tables:
+            conn.execute(text("DROP TABLE IF EXISTS leads"))
+            conn.execute(text("DROP TABLE IF EXISTS pipeline_stages"))
+            conn.commit()
+            logging.info("Tabelas stale descartadas para migração multi-tenant.")
+
+
+def _migrate_columns():
+    """Adiciona colunas que podem faltar em instalações pré-existentes."""
+    with engine.connect() as conn:
+        user_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(users)"))}
+        if "workspace_id" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN workspace_id INTEGER REFERENCES workspaces(id)"))
+            conn.commit()
+        if "name" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN name VARCHAR"))
+            conn.commit()
+        if "is_admin" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
+            conn.commit()
+
+        lead_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(leads)"))}
         if "stage_id" not in lead_cols:
             conn.execute(text("ALTER TABLE leads ADD COLUMN stage_id INTEGER"))
             conn.commit()
@@ -27,49 +55,28 @@ def _migrate():
         if "user_id" not in lead_cols:
             conn.execute(text("ALTER TABLE leads ADD COLUMN user_id INTEGER"))
             conn.commit()
-
-        # users
-        user_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(users)"))]
-        if "name" not in user_cols:
-            conn.execute(text("ALTER TABLE users ADD COLUMN name VARCHAR"))
-            conn.commit()
-        if "is_admin" not in user_cols:
-            conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
+        if "workspace_id" not in lead_cols:
+            conn.execute(text("ALTER TABLE leads ADD COLUMN workspace_id INTEGER REFERENCES workspaces(id)"))
             conn.commit()
 
-
-def _seed():
-    """Cria as etapas padrão do pipeline se a tabela estiver vazia."""
-    db = SessionLocal()
-    try:
-        if db.query(pipeline_stage.PipelineStage).count() > 0:
-            return
-        defaults = [
-            {"name": "novo",        "order": 1, "color": "#6366f1"},
-            {"name": "contato",     "order": 2, "color": "#f59e0b"},
-            {"name": "qualificado", "order": 3, "color": "#3b82f6"},
-            {"name": "proposta",    "order": 4, "color": "#8b5cf6"},
-            {"name": "fechado",     "order": 5, "color": "#22c55e"},
-            {"name": "perdido",     "order": 6, "color": "#ef4444"},
-        ]
-        for s in defaults:
-            db.add(pipeline_stage.PipelineStage(**s))
-        db.commit()
-    finally:
-        db.close()
+        ps_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(pipeline_stages)"))}
+        if "workspace_id" not in ps_cols:
+            conn.execute(text("ALTER TABLE pipeline_stages ADD COLUMN workspace_id INTEGER REFERENCES workspaces(id)"))
+            conn.commit()
 
 
+_drop_stale_tables()
 Base.metadata.create_all(bind=engine)
-_migrate()
-_seed()
+_migrate_columns()
 
 app = FastAPI(
     title="CRM API",
-    description="API de gerenciamento de leads",
-    version="1.0.0",
+    description="API de gerenciamento de leads multi-tenant",
+    version="2.0.0",
 )
 
 app.include_router(auth.router)
+app.include_router(workspace_router.router)
 app.include_router(leads.router)
 app.include_router(webhook.router)
 app.include_router(pipeline.router)
@@ -77,4 +84,4 @@ app.include_router(pipeline.router)
 
 @app.get("/")
 def root():
-    return {"message": "CRM API funcionando", "docs": "/docs"}
+    return {"message": "CRM API funcionando", "docs": "/docs", "version": "2.0.0"}

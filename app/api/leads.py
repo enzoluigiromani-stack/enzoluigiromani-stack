@@ -8,15 +8,21 @@ from app.database.database import get_db
 from app.models.lead import Lead
 from app.models.pipeline_stage import PipelineStage
 from app.models.user import User
+from app.models.workspace import Workspace
 from app.schemas.lead import LeadCreate, LeadMoveRequest, LeadUpdate, LeadResponse
 from app.services.auth import get_current_user
+from app.services.workspace import require_workspace
 from app.services.notifications import notify_new_lead, notify_lead_moved
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
 
-def _upsert_lead(db: Session, email: str, data: dict) -> tuple[Lead, bool]:
-    existing = db.query(Lead).filter(Lead.email == email).first()
+def _upsert_lead(db: Session, email: str, workspace_id: int, data: dict) -> tuple[Lead, bool]:
+    existing = (
+        db.query(Lead)
+        .filter(Lead.email == email, Lead.workspace_id == workspace_id)
+        .first()
+    )
     if existing:
         for field, value in data.items():
             if value is not None:
@@ -27,7 +33,11 @@ def _upsert_lead(db: Session, email: str, data: dict) -> tuple[Lead, bool]:
         return existing, False
 
     if not data.get("stage_id"):
-        novo = db.query(PipelineStage).filter(PipelineStage.name == "novo").first()
+        novo = (
+            db.query(PipelineStage)
+            .filter(PipelineStage.name == "novo", PipelineStage.workspace_id == workspace_id)
+            .first()
+        )
         if novo:
             data = {**data, "stage_id": novo.id}
 
@@ -44,9 +54,10 @@ def create_lead(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(require_workspace),
 ):
-    data = {**lead.model_dump(), "user_id": current_user.id}
-    db_lead, criado = _upsert_lead(db, lead.email, data)
+    data = {**lead.model_dump(), "user_id": current_user.id, "workspace_id": workspace.id}
+    db_lead, criado = _upsert_lead(db, lead.email, workspace.id, data)
     if criado:
         background_tasks.add_task(notify_new_lead, db_lead)
     mensagem = "Lead criado" if criado else "Lead atualizado"
@@ -58,11 +69,11 @@ def list_leads(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(require_workspace),
 ):
     return (
         db.query(Lead)
-        .filter(Lead.user_id == current_user.id)
+        .filter(Lead.workspace_id == workspace.id)
         .offset(skip)
         .limit(limit)
         .all()
@@ -73,9 +84,9 @@ def list_leads(
 def get_lead(
     lead_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(require_workspace),
 ):
-    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.user_id == current_user.id).first()
+    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.workspace_id == workspace.id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead não encontrado")
     return lead
@@ -86,9 +97,9 @@ def update_lead(
     lead_id: int,
     data: LeadUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(require_workspace),
 ):
-    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.user_id == current_user.id).first()
+    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.workspace_id == workspace.id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead não encontrado")
     for field, value in data.model_dump(exclude_unset=True).items():
@@ -105,12 +116,16 @@ def move_lead(
     body: LeadMoveRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(require_workspace),
 ):
-    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.user_id == current_user.id).first()
+    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.workspace_id == workspace.id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead não encontrado")
-    stage = db.query(PipelineStage).filter(PipelineStage.id == body.stage_id).first()
+    stage = (
+        db.query(PipelineStage)
+        .filter(PipelineStage.id == body.stage_id, PipelineStage.workspace_id == workspace.id)
+        .first()
+    )
     if not stage:
         raise HTTPException(status_code=404, detail="Etapa não encontrada")
     lead.stage_id = body.stage_id
@@ -129,9 +144,9 @@ def move_lead(
 def delete_lead(
     lead_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    workspace: Workspace = Depends(require_workspace),
 ):
-    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.user_id == current_user.id).first()
+    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.workspace_id == workspace.id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead não encontrado")
     db.delete(lead)

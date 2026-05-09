@@ -5,6 +5,7 @@ from app.database.database import get_db
 from app.models.user import User
 from app.schemas.user import Token, UserCreate, UserLogin, UserResponse
 from app.services.auth import create_access_token, get_current_user, hash_password, verify_password
+from app.services.workspace import create_workspace
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -14,10 +15,14 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == data.email).first():
         raise HTTPException(status_code=400, detail="E-mail já cadastrado")
 
+    workspace = create_workspace(db, data.name)
+
     user = User(
         name=data.name,
         email=data.email,
         hashed_password=hash_password(data.password),
+        is_admin=True,
+        workspace_id=workspace.id,
     )
     db.add(user)
     db.commit()

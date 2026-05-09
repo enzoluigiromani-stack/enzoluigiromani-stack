@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel, EmailStr
 
 
@@ -23,6 +24,7 @@ class UserResponse(BaseModel):
     name: str
     email: str
     is_admin: bool
+    workspace_id: Optional[int] = None
     created_at: datetime
 
     class Config:

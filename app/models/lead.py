@@ -1,23 +1,28 @@
 from datetime import datetime
-from sqlalchemy import Column, Float, ForeignKey, Integer, String, DateTime
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database.database import Base
 
 
 class Lead(Base):
     __tablename__ = "leads"
+    __table_args__ = (
+        UniqueConstraint("email", "workspace_id", name="uq_leads_email_workspace"),
+    )
 
-    id       = Column(Integer, primary_key=True, index=True)
-    name     = Column(String, nullable=False)
-    email    = Column(String, unique=True, nullable=False, index=True)
-    phone    = Column(String, nullable=True)
-    source   = Column(String, nullable=True)
-    status   = Column(String, default="novo")
-    stage_id = Column(Integer, ForeignKey("pipeline_stages.id"), nullable=True)
-    budget   = Column(Float, nullable=True)
-    user_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=True)
+    id           = Column(Integer, primary_key=True, index=True)
+    name         = Column(String, nullable=False)
+    email        = Column(String, nullable=False, index=True)
+    phone        = Column(String, nullable=True)
+    source       = Column(String, nullable=True)
+    status       = Column(String, default="novo")
+    stage_id     = Column(Integer, ForeignKey("pipeline_stages.id"), nullable=True)
+    budget       = Column(Float, nullable=True)
+    user_id      = Column(Integer, ForeignKey("users.id"), nullable=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=False)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+    updated_at   = Column(DateTime, nullable=True)
 
-    stage = relationship("PipelineStage", back_populates="leads")
-    owner = relationship("User")
+    stage     = relationship("PipelineStage", back_populates="leads")
+    owner     = relationship("User")
+    workspace = relationship("Workspace", back_populates="leads")
