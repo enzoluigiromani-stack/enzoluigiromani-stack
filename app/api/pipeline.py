@@ -10,6 +10,7 @@ from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.lead import LeadResponse
 from app.schemas.pipeline_stage import PipelineStageCreate, PipelineStageResponse
+from app.services.activity_service import log_activity
 from app.services.permissions import require_manager, require_sales
 from app.services.workspace import require_workspace
 
@@ -47,6 +48,15 @@ def create_stage(
     db.add(db_stage)
     db.commit()
     db.refresh(db_stage)
+
+    log_activity(
+        db,
+        workspace_id=workspace.id,
+        type="stage_created",
+        description=f"Etapa criada: {db_stage.name}",
+        user_id=_.id,
+        meta={"stage_name": db_stage.name, "color": db_stage.color},
+    )
     return db_stage
 
 

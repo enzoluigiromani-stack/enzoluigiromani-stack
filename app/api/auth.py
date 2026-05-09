@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.models.user import User
 from app.schemas.user import Token, UserCreate, UserLogin, UserResponse
+from app.services.activity_service import log_activity
 from app.services.auth import create_access_token, get_current_user, hash_password, verify_password
 from app.services.workspace import create_workspace
 
@@ -16,7 +17,6 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="E-mail já cadastrado")
 
     workspace = create_workspace(db, data.name)
-
     user = User(
         name=data.name,
         email=data.email,
@@ -39,6 +39,14 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="E-mail ou senha incorretos",
         )
+    log_activity(
+        db,
+        workspace_id=user.workspace_id,
+        type="user_login",
+        description=f"{user.name} fez login",
+        user_id=user.id,
+        meta={"email": user.email},
+    )
     return {"access_token": create_access_token(user.id), "token_type": "bearer"}
 
 

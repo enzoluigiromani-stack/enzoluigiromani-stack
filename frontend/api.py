@@ -67,6 +67,30 @@ def create_lead(data: dict, token: str) -> dict:
     return res.json()
 
 
+# ── Activities ────────────────────────────────────────────────────────────────
+
+def get_activities(token: str, page: int = 1, limit: int = 10) -> dict:
+    try:
+        res = requests.get(f"{API_URL}/activities",
+                           params={"page": page, "limit": limit},
+                           headers=_headers(token), timeout=5)
+        res.raise_for_status()
+        return res.json()
+    except Exception:
+        return {"items": [], "total": 0, "page": 1, "limit": limit, "pages": 1}
+
+
+def get_lead_timeline(lead_id: int, token: str, page: int = 1, limit: int = 50) -> dict:
+    try:
+        res = requests.get(f"{API_URL}/leads/{lead_id}/timeline",
+                           params={"page": page, "limit": limit},
+                           headers=_headers(token), timeout=5)
+        res.raise_for_status()
+        return res.json()
+    except Exception:
+        return {"items": [], "total": 0, "page": 1, "limit": limit, "pages": 1}
+
+
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 
 def get_board(token: str) -> list:

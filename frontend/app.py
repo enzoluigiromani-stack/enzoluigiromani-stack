@@ -2,6 +2,7 @@ import streamlit as st
 from api import (
     register, login, get_me, get_workspace, get_workspace_settings,
     update_workspace_settings, get_leads, get_board, create_lead,
+    get_activities, get_lead_timeline,
 )
 
 st.set_page_config(
@@ -47,6 +48,14 @@ st.markdown("""
         border-radius: 10px;
         padding: 16px 20px;
     }
+    .activity-row {
+        display: flex; align-items: flex-start; gap: 10px;
+        padding: 8px 0; border-bottom: 1px solid #f1f5f9;
+    }
+    .activity-icon { font-size: 18px; min-width: 24px; }
+    .activity-body { flex: 1; }
+    .activity-desc { font-size: 13px; color: #1e293b; }
+    .activity-meta { font-size: 11px; color: #94a3b8; margin-top: 2px; }
     .ws-badge {
         background: #ede9fe; color: #6d28d9;
         font-size: 12px; font-weight: 600;
@@ -60,6 +69,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 _CURRENCY_SYMBOL = {"BRL": "R$", "USD": "$", "EUR": "€", "GBP": "£"}
+
+_ACTIVITY_ICON = {
+    "lead_created":  "🟢",
+    "lead_updated":  "✏️",
+    "lead_moved":    "↗️",
+    "email_sent":    "📧",
+    "whatsapp_sent": "📱",
+    "user_login":    "🔐",
+    "stage_created": "🏷️",
+}
 
 
 def _currency_fmt(value: float, currency: str) -> str:
@@ -270,3 +289,67 @@ for i, item in enumerate(board):
                 f'</div>',
                 unsafe_allow_html=True,
             )
+
+# ── Atividades Recentes ───────────────────────────────────────────────────────
+st.divider()
+col_act, col_tl = st.columns([1, 1])
+
+with col_act:
+    st.markdown("### 📋 Atividades Recentes")
+    act_data = get_activities(token, page=1, limit=10)
+    activity_items = act_data.get("items", [])
+
+    if not activity_items:
+        st.caption("Nenhuma atividade registrada ainda.")
+    else:
+        rows_html = ""
+        for a in activity_items:
+            icon = _ACTIVITY_ICON.get(a["type"], "•")
+            ts   = a["created_at"][:16].replace("T", " ")
+            who  = a.get("user_name") or "Sistema"
+            rows_html += (
+                f'<div class="activity-row">'
+                f'  <div class="activity-icon">{icon}</div>'
+                f'  <div class="activity-body">'
+                f'    <div class="activity-desc">{a["description"]}</div>'
+                f'    <div class="activity-meta">{who} · {ts}</div>'
+                f'  </div>'
+                f'</div>'
+            )
+        st.markdown(rows_html, unsafe_allow_html=True)
+
+# ── Timeline do Lead ─────────────────────────────────────────────────────────
+with col_tl:
+    st.markdown("### 🔍 Timeline do Lead")
+
+    all_leads = get_leads(token)
+    if not all_leads:
+        st.caption("Nenhum lead cadastrado.")
+    else:
+        lead_options = {f'{l["name"]} ({l["email"]})': l["id"] for l in all_leads}
+        selected = st.selectbox("Selecione um lead", list(lead_options.keys()),
+                                label_visibility="collapsed")
+        lead_id = lead_options[selected]
+
+        tl_data = get_lead_timeline(lead_id, token, limit=20)
+        tl_items = tl_data.get("items", [])
+
+        if not tl_items:
+            st.caption("Nenhuma atividade para este lead.")
+        else:
+            rows_html = ""
+            for a in tl_items:
+                icon = _ACTIVITY_ICON.get(a["type"], "•")
+                ts   = a["created_at"][:16].replace("T", " ")
+                who  = a.get("user_name") or "Sistema"
+                rows_html += (
+                    f'<div class="activity-row">'
+                    f'  <div class="activity-icon">{icon}</div>'
+                    f'  <div class="activity-body">'
+                    f'    <div class="activity-desc">{a["description"]}</div>'
+                    f'    <div class="activity-meta">{who} · {ts}</div>'
+                    f'  </div>'
+                    f'</div>'
+                )
+            st.markdown(rows_html, unsafe_allow_html=True)
+            st.caption(f"Total: {tl_data['total']} evento(s)")

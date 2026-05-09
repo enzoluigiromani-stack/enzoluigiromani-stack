@@ -10,6 +10,7 @@ from app.models.pipeline_stage import PipelineStage
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.lead import LeadCreate, LeadMoveRequest, LeadUpdate, LeadResponse
+from app.services.activity_service import log_activity
 from app.services.permissions import require_manager, require_sales
 from app.services.workspace import require_workspace
 from app.services.notifications import notify_new_lead, notify_lead_moved
@@ -58,8 +59,21 @@ def create_lead(
 ):
     data = {**lead.model_dump(), "user_id": current_user.id, "workspace_id": workspace.id}
     db_lead, criado = _upsert_lead(db, lead.email, workspace.id, data)
+
+    activity_type = "lead_created" if criado else "lead_updated"
+    log_activity(
+        db,
+        workspace_id=workspace.id,
+        type=activity_type,
+        description=f"Lead {'criado' if criado else 'atualizado'}: {db_lead.name}",
+        user_id=current_user.id,
+        lead_id=db_lead.id,
+        meta={"email": db_lead.email, "source": db_lead.source},
+    )
+
     if criado:
         background_tasks.add_task(notify_new_lead, db_lead)
+
     return {"message": "Lead criado" if criado else "Lead atualizado",
             "lead": jsonable_encoder(LeadResponse.model_validate(db_lead))}
 
@@ -73,7 +87,6 @@ def list_leads(
     workspace: Workspace = Depends(require_workspace),
 ):
     query = db.query(Lead).filter(Lead.workspace_id == workspace.id)
-    # sales só vê os próprios leads
     if current_user.role == "sales":
         query = query.filter(Lead.user_id == current_user.id)
     return query.offset(skip).limit(limit).all()
@@ -109,11 +122,23 @@ def update_lead(
     lead = query.first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead não encontrado")
+
+    changed = list(data.model_dump(exclude_unset=True).keys())
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(lead, field, value)
     lead.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(lead)
+
+    log_activity(
+        db,
+        workspace_id=workspace.id,
+        type="lead_updated",
+        description=f"Lead atualizado: {lead.name}",
+        user_id=current_user.id,
+        lead_id=lead.id,
+        meta={"changed_fields": changed},
+    )
     return lead
 
 
@@ -123,12 +148,14 @@ def move_lead(
     body: LeadMoveRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_manager),  # sales não pode mover
+    current_user: User = Depends(require_manager),
     workspace: Workspace = Depends(require_workspace),
 ):
     lead = db.query(Lead).filter(Lead.id == lead_id, Lead.workspace_id == workspace.id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead não encontrado")
+
+    old_stage = db.query(PipelineStage).filter(PipelineStage.id == lead.stage_id).first()
     stage = (
         db.query(PipelineStage)
         .filter(PipelineStage.id == body.stage_id, PipelineStage.workspace_id == workspace.id)
@@ -136,10 +163,21 @@ def move_lead(
     )
     if not stage:
         raise HTTPException(status_code=404, detail="Etapa não encontrada")
+
     lead.stage_id = body.stage_id
     lead.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(lead)
+
+    log_activity(
+        db,
+        workspace_id=workspace.id,
+        type="lead_moved",
+        description=f"Lead movido: {lead.name} → {stage.name}",
+        user_id=current_user.id,
+        lead_id=lead.id,
+        meta={"from_stage": old_stage.name if old_stage else None, "to_stage": stage.name},
+    )
     background_tasks.add_task(notify_lead_moved, lead, stage.name)
     return {"message": f"Lead movido para '{stage.name}'", "lead_id": lead_id,
             "stage": jsonable_encoder(stage)}
@@ -149,7 +187,7 @@ def move_lead(
 def delete_lead(
     lead_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_manager),  # sales não pode deletar
+    current_user: User = Depends(require_manager),
     workspace: Workspace = Depends(require_workspace),
 ):
     lead = db.query(Lead).filter(Lead.id == lead_id, Lead.workspace_id == workspace.id).first()
