@@ -10,7 +10,7 @@ from app.models.pipeline_stage import PipelineStage
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.lead import LeadCreate, LeadMoveRequest, LeadUpdate, LeadResponse
-from app.services.auth import get_current_user
+from app.services.permissions import require_manager, require_sales
 from app.services.workspace import require_workspace
 from app.services.notifications import notify_new_lead, notify_lead_moved
 
@@ -53,15 +53,15 @@ def create_lead(
     lead: LeadCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_sales),
     workspace: Workspace = Depends(require_workspace),
 ):
     data = {**lead.model_dump(), "user_id": current_user.id, "workspace_id": workspace.id}
     db_lead, criado = _upsert_lead(db, lead.email, workspace.id, data)
     if criado:
         background_tasks.add_task(notify_new_lead, db_lead)
-    mensagem = "Lead criado" if criado else "Lead atualizado"
-    return {"message": mensagem, "lead": jsonable_encoder(LeadResponse.model_validate(db_lead))}
+    return {"message": "Lead criado" if criado else "Lead atualizado",
+            "lead": jsonable_encoder(LeadResponse.model_validate(db_lead))}
 
 
 @router.get("/", response_model=List[LeadResponse])
@@ -69,24 +69,27 @@ def list_leads(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_sales),
     workspace: Workspace = Depends(require_workspace),
 ):
-    return (
-        db.query(Lead)
-        .filter(Lead.workspace_id == workspace.id)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+    query = db.query(Lead).filter(Lead.workspace_id == workspace.id)
+    # sales só vê os próprios leads
+    if current_user.role == "sales":
+        query = query.filter(Lead.user_id == current_user.id)
+    return query.offset(skip).limit(limit).all()
 
 
 @router.get("/{lead_id}", response_model=LeadResponse)
 def get_lead(
     lead_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_sales),
     workspace: Workspace = Depends(require_workspace),
 ):
-    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.workspace_id == workspace.id).first()
+    query = db.query(Lead).filter(Lead.id == lead_id, Lead.workspace_id == workspace.id)
+    if current_user.role == "sales":
+        query = query.filter(Lead.user_id == current_user.id)
+    lead = query.first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead não encontrado")
     return lead
@@ -97,9 +100,13 @@ def update_lead(
     lead_id: int,
     data: LeadUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_sales),
     workspace: Workspace = Depends(require_workspace),
 ):
-    lead = db.query(Lead).filter(Lead.id == lead_id, Lead.workspace_id == workspace.id).first()
+    query = db.query(Lead).filter(Lead.id == lead_id, Lead.workspace_id == workspace.id)
+    if current_user.role == "sales":
+        query = query.filter(Lead.user_id == current_user.id)
+    lead = query.first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead não encontrado")
     for field, value in data.model_dump(exclude_unset=True).items():
@@ -116,6 +123,7 @@ def move_lead(
     body: LeadMoveRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager),  # sales não pode mover
     workspace: Workspace = Depends(require_workspace),
 ):
     lead = db.query(Lead).filter(Lead.id == lead_id, Lead.workspace_id == workspace.id).first()
@@ -133,17 +141,15 @@ def move_lead(
     db.commit()
     db.refresh(lead)
     background_tasks.add_task(notify_lead_moved, lead, stage.name)
-    return {
-        "message": f"Lead movido para '{stage.name}'",
-        "lead_id": lead_id,
-        "stage": jsonable_encoder(stage),
-    }
+    return {"message": f"Lead movido para '{stage.name}'", "lead_id": lead_id,
+            "stage": jsonable_encoder(stage)}
 
 
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_lead(
     lead_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_manager),  # sales não pode deletar
     workspace: Workspace = Depends(require_workspace),
 ):
     lead = db.query(Lead).filter(Lead.id == lead_id, Lead.workspace_id == workspace.id).first()

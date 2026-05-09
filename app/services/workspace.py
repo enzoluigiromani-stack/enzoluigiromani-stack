@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.models.pipeline_stage import PipelineStage
 from app.models.workspace import Workspace
+from app.models.workspace_settings import WorkspaceSettings
 
 _DEFAULT_STAGES = [
     {"name": "novo",        "order": 1, "color": "#6366f1"},
@@ -33,24 +34,33 @@ def _unique_slug(db: Session, base: str) -> str:
 
 
 def create_workspace(db: Session, name: str) -> Workspace:
-    """Cria workspace + stages padrão. Usa flush — o chamador deve commitar."""
+    """Cria workspace, stages padrão e settings padrão. Usa flush — o chamador commita."""
     slug = _unique_slug(db, name)
     workspace = Workspace(name=name, slug=slug)
     db.add(workspace)
     db.flush()
+
     for stage_data in _DEFAULT_STAGES:
         db.add(PipelineStage(**stage_data, workspace_id=workspace.id))
+
+    db.add(WorkspaceSettings(
+        workspace_id=workspace.id,
+        company_name=name,
+        currency="BRL",
+        timezone="America/Sao_Paulo",
+        primary_color="#6366f1",
+    ))
     db.flush()
     return workspace
 
 
-# Import tardio para evitar circular (services.auth não importa services.workspace)
+# Import tardio para evitar circular
 from app.services.auth import get_current_user  # noqa: E402
 from app.models.user import User                # noqa: E402
 
 
 def require_workspace(current_user: User = Depends(get_current_user)) -> Workspace:
-    """Dependency FastAPI: retorna o Workspace do usuário autenticado."""
+    """Dependency: retorna o Workspace do usuário autenticado."""
     if not current_user.workspace:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

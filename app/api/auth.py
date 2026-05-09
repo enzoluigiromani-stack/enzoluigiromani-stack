@@ -21,6 +21,7 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
         name=data.name,
         email=data.email,
         hashed_password=hash_password(data.password),
+        role="admin",
         is_admin=True,
         workspace_id=workspace.id,
     )

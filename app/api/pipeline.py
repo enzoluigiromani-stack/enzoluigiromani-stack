@@ -6,9 +6,11 @@ from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.models.lead import Lead
 from app.models.pipeline_stage import PipelineStage
+from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.lead import LeadResponse
 from app.schemas.pipeline_stage import PipelineStageCreate, PipelineStageResponse
+from app.services.permissions import require_manager, require_sales
 from app.services.workspace import require_workspace
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -18,6 +20,7 @@ router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 def list_stages(
     db: Session = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
+    _: User = Depends(require_sales),
 ):
     return (
         db.query(PipelineStage)
@@ -32,6 +35,7 @@ def create_stage(
     stage: PipelineStageCreate,
     db: Session = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
+    _: User = Depends(require_manager),
 ):
     if (
         db.query(PipelineStage)
@@ -49,6 +53,7 @@ def create_stage(
 @router.get("/board")
 def get_board(
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_sales),
     workspace: Workspace = Depends(require_workspace),
 ):
     stages = (
@@ -59,11 +64,10 @@ def get_board(
     )
     board = []
     for stage in stages:
-        leads = (
-            db.query(Lead)
-            .filter(Lead.stage_id == stage.id, Lead.workspace_id == workspace.id)
-            .all()
-        )
+        q = db.query(Lead).filter(Lead.stage_id == stage.id, Lead.workspace_id == workspace.id)
+        if current_user.role == "sales":
+            q = q.filter(Lead.user_id == current_user.id)
+        leads = q.all()
         board.append({
             "stage": jsonable_encoder(PipelineStageResponse.model_validate(stage)),
             "total": len(leads),

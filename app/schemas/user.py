@@ -23,6 +23,7 @@ class UserResponse(BaseModel):
     id: int
     name: str
     email: str
+    role: str
     is_admin: bool
     workspace_id: Optional[int] = None
     created_at: datetime

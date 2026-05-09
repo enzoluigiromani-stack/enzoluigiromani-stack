@@ -6,20 +6,17 @@ logging.basicConfig(level=logging.INFO)
 
 from fastapi import FastAPI
 from sqlalchemy import text
-from app.database.database import Base, engine, SessionLocal
-from app.models import workspace   # noqa: F401  registra Workspace no Base
-from app.models import pipeline_stage  # noqa: F401  registra PipelineStage
-from app.models import lead        # noqa: F401  registra Lead
-from app.models import user        # noqa: F401  registra User
+from app.database.database import Base, engine
+from app.models import workspace          # noqa: F401
+from app.models import workspace_settings  # noqa: F401
+from app.models import pipeline_stage     # noqa: F401
+from app.models import lead               # noqa: F401
+from app.models import user               # noqa: F401
 from app.api import leads, webhook, pipeline, auth, workspace as workspace_router
 
 
 def _drop_stale_tables():
-    """
-    Na primeira execução do esquema multi-tenant (antes de existir a tabela workspaces),
-    descarta leads e pipeline_stages para recriá-los com o novo schema correto.
-    Dados antigos sem workspace_id não têm utilidade.
-    """
+    """Descarta tabelas sem workspace_id na primeira migração multi-tenant."""
     with engine.connect() as conn:
         tables = {r[0] for r in conn.execute(text(
             "SELECT name FROM sqlite_master WHERE type='table'"
@@ -32,32 +29,29 @@ def _drop_stale_tables():
 
 
 def _migrate_columns():
-    """Adiciona colunas que podem faltar em instalações pré-existentes."""
+    """Adiciona colunas ausentes em instalações pré-existentes."""
     with engine.connect() as conn:
         user_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(users)"))}
-        if "workspace_id" not in user_cols:
-            conn.execute(text("ALTER TABLE users ADD COLUMN workspace_id INTEGER REFERENCES workspaces(id)"))
-            conn.commit()
-        if "name" not in user_cols:
-            conn.execute(text("ALTER TABLE users ADD COLUMN name VARCHAR"))
-            conn.commit()
-        if "is_admin" not in user_cols:
-            conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0"))
-            conn.commit()
+        for col, ddl in [
+            ("workspace_id", "INTEGER REFERENCES workspaces(id)"),
+            ("name",         "VARCHAR"),
+            ("is_admin",     "BOOLEAN DEFAULT 0"),
+            ("role",         "VARCHAR DEFAULT 'admin'"),
+        ]:
+            if col not in user_cols:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {ddl}"))
+                conn.commit()
 
         lead_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(leads)"))}
-        if "stage_id" not in lead_cols:
-            conn.execute(text("ALTER TABLE leads ADD COLUMN stage_id INTEGER"))
-            conn.commit()
-        if "budget" not in lead_cols:
-            conn.execute(text("ALTER TABLE leads ADD COLUMN budget REAL"))
-            conn.commit()
-        if "user_id" not in lead_cols:
-            conn.execute(text("ALTER TABLE leads ADD COLUMN user_id INTEGER"))
-            conn.commit()
-        if "workspace_id" not in lead_cols:
-            conn.execute(text("ALTER TABLE leads ADD COLUMN workspace_id INTEGER REFERENCES workspaces(id)"))
-            conn.commit()
+        for col, ddl in [
+            ("stage_id",     "INTEGER"),
+            ("budget",       "REAL"),
+            ("user_id",      "INTEGER"),
+            ("workspace_id", "INTEGER REFERENCES workspaces(id)"),
+        ]:
+            if col not in lead_cols:
+                conn.execute(text(f"ALTER TABLE leads ADD COLUMN {col} {ddl}"))
+                conn.commit()
 
         ps_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(pipeline_stages)"))}
         if "workspace_id" not in ps_cols:
@@ -71,8 +65,8 @@ _migrate_columns()
 
 app = FastAPI(
     title="CRM API",
-    description="API de gerenciamento de leads multi-tenant",
-    version="2.0.0",
+    description="API de gerenciamento de leads multi-tenant com RBAC",
+    version="3.0.0",
 )
 
 app.include_router(auth.router)
@@ -84,4 +78,4 @@ app.include_router(pipeline.router)
 
 @app.get("/")
 def root():
-    return {"message": "CRM API funcionando", "docs": "/docs", "version": "2.0.0"}
+    return {"message": "CRM API funcionando", "docs": "/docs", "version": "3.0.0"}

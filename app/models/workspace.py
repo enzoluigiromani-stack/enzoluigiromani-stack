@@ -12,6 +12,7 @@ class Workspace(Base):
     slug       = Column(String, unique=True, nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    users  = relationship("User", back_populates="workspace")
-    leads  = relationship("Lead", back_populates="workspace")
-    stages = relationship("PipelineStage", back_populates="workspace")
+    users    = relationship("User", back_populates="workspace")
+    leads    = relationship("Lead", back_populates="workspace")
+    stages   = relationship("PipelineStage", back_populates="workspace")
+    settings = relationship("WorkspaceSettings", back_populates="workspace", uselist=False)
