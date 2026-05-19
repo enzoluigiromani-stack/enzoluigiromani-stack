@@ -155,6 +155,63 @@ def move_lead(lead_id: int, stage_id: int, token: str) -> dict:
     return res.json()
 
 
+# ── Inbox ─────────────────────────────────────────────────────────────────────
+
+def get_conversations(token: str, status: str = None, channel: str = None,
+                      lead_id: int = None, page: int = 1, limit: int = 50) -> dict:
+    params = {"page": page, "limit": limit}
+    if status:   params["status"]  = status
+    if channel:  params["channel"] = channel
+    if lead_id:  params["lead_id"] = lead_id
+    try:
+        res = requests.get(f"{API_URL}/inbox/conversations",
+                           params=params, headers=_headers(token), timeout=5)
+        res.raise_for_status()
+        return res.json()
+    except Exception:
+        return {"items": [], "total": 0, "page": 1, "limit": limit, "pages": 1}
+
+
+def get_conversation(token: str, conversation_id: int) -> dict:
+    res = requests.get(f"{API_URL}/inbox/conversations/{conversation_id}",
+                       headers=_headers(token), timeout=5)
+    res.raise_for_status()
+    return res.json()
+
+
+def create_conversation(data: dict, token: str) -> dict:
+    res = requests.post(f"{API_URL}/inbox/conversations",
+                        json=data, headers=_headers(token), timeout=5)
+    res.raise_for_status()
+    return res.json()
+
+
+def update_conversation(conversation_id: int, data: dict, token: str) -> dict:
+    res = requests.patch(f"{API_URL}/inbox/conversations/{conversation_id}",
+                         json=data, headers=_headers(token), timeout=5)
+    res.raise_for_status()
+    return res.json()
+
+
+def get_inbox_messages(token: str, conversation_id: int,
+                       page: int = 1, limit: int = 100) -> dict:
+    params = {"page": page, "limit": limit}
+    try:
+        res = requests.get(f"{API_URL}/inbox/messages/{conversation_id}",
+                           params=params, headers=_headers(token), timeout=5)
+        res.raise_for_status()
+        return res.json()
+    except Exception:
+        return {"items": [], "total": 0, "page": 1, "limit": limit, "pages": 1}
+
+
+def send_inbox_message(data: dict, token: str) -> dict:
+    res = requests.post(f"{API_URL}/inbox/messages",
+                        json=data, headers=_headers(token), timeout=5)
+    res.raise_for_status()
+    return res.json()
+
+
 # ── Lead Capture ─────────────────────────────────────────────────────────────
 
 def get_capture_events(token: str, page: int = 1, limit: int = 50,

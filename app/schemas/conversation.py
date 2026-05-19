@@ -29,6 +29,10 @@ class ConversationResponse(BaseModel):
     created_at:       datetime
     updated_at:       Optional[datetime] = None
     closed_at:        Optional[datetime] = None
+    # campos enriquecidos (preenchidos pelo endpoint, não pelo ORM)
+    lead_name:        Optional[str] = None
+    lead_email:       Optional[str] = None
+    lead_phone:       Optional[str] = None
 
     class Config:
         from_attributes = True

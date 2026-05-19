@@ -85,8 +85,16 @@ def list_conversations(
         page             = page,
         limit            = limit,
     )
+    enriched = []
+    for conv in items:
+        r = ConversationResponse.model_validate(conv)
+        if conv.lead:
+            r.lead_name  = conv.lead.name
+            r.lead_email = conv.lead.email
+            r.lead_phone = conv.lead.phone
+        enriched.append(r)
     return PaginatedConversations(
-        items = items,
+        items = enriched,
         total = total,
         page  = page,
         limit = limit,
@@ -104,7 +112,12 @@ def get_conversation(
     conv = inbox_service.get_conversation(db, conversation_id, workspace.id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversa não encontrada")
-    return conv
+    r = ConversationResponse.model_validate(conv)
+    if conv.lead:
+        r.lead_name  = conv.lead.name
+        r.lead_email = conv.lead.email
+        r.lead_phone = conv.lead.phone
+    return r
 
 
 @router.patch("/conversations/{conversation_id}", response_model=ConversationResponse)
