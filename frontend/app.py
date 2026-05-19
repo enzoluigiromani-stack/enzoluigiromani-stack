@@ -2,7 +2,7 @@ import streamlit as st
 from api import (
     register, login, get_me, get_workspace, get_workspace_settings,
     update_workspace_settings, get_leads, get_board, create_lead,
-    get_activities, get_lead_timeline,
+    move_lead, get_activities, get_lead_timeline,
 )
 
 st.set_page_config(
@@ -17,10 +17,31 @@ st.markdown("""
     .lead-card {
         background: #ffffff;
         border: 1px solid #e2e8f0;
+        border-radius: 10px 10px 0 0;
+        border-bottom: none;
+        padding: 12px 14px 8px 14px;
+        margin-bottom: 0;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        transition: box-shadow 0.15s ease;
+    }
+    .lead-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.1); }
+    .lead-card-simple {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
         border-radius: 10px;
         padding: 12px 14px;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
         box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        transition: box-shadow 0.15s ease;
+    }
+    .lead-card-simple:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.1); }
+    .card-move-area {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-top: 1px dashed #e2e8f0;
+        border-radius: 0 0 10px 10px;
+        padding: 4px 6px 6px 6px;
+        margin-bottom: 10px;
     }
     .lead-name  { font-weight: 700; font-size: 14px; color: #1e293b; margin-bottom: 4px; }
     .lead-info  { color: #64748b; font-size: 13px; margin-top: 3px; }
@@ -32,6 +53,18 @@ st.markdown("""
         padding: 2px 8px;
         border-radius: 99px;
         margin-top: 6px;
+        margin-right: 4px;
+    }
+    .badge-budget {
+        display: inline-block;
+        background: #d1fae5;
+        color: #065f46;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 99px;
+        margin-top: 6px;
+        margin-right: 4px;
     }
     .stage-header {
         font-size: 13px;
@@ -250,10 +283,22 @@ m3.metric("Fechados",          fechados)
 m4.metric("Taxa de Conversão", taxa)
 m5.metric("Receita Estimada",  _currency_fmt(budget_total, currency) if budget_total else "—")
 
+# ── Feedback de movimentação ──────────────────────────────────────────────────
+if "_move_ok" in st.session_state:
+    st.success(st.session_state.pop("_move_ok"))
+if "_move_err" in st.session_state:
+    st.error(st.session_state.pop("_move_err"))
+
 st.divider()
 
 
 # ── Kanban ────────────────────────────────────────────────────────────────────
+
+# Mapa de etapas: id → nome e nome → id (usado nos selectboxes de movimentação)
+_stage_by_id   = {item["stage"]["id"]: item["stage"] for item in board}
+_stage_options = [(item["stage"]["id"], item["stage"]["name"].capitalize()) for item in board]
+can_move = role in ("admin", "manager")
+
 kanban_cols = st.columns(len(board))
 
 for i, item in enumerate(board):
@@ -278,17 +323,61 @@ for i, item in enumerate(board):
             phone_line  = f'<div class="lead-info">📞 {lead["phone"]}</div>' if lead.get("phone") else ""
             source_line = f'<span class="badge">📍 {lead["source"]}</span>' if lead.get("source") else ""
             budget_line = (
-                f'<span class="badge">💰 {_currency_fmt(lead["budget"], currency)}</span>'
+                f'<span class="badge-budget">💰 {_currency_fmt(lead["budget"], currency)}</span>'
                 if lead.get("budget") else ""
             )
+
+            # Classe do card: com ou sem área de movimentação abaixo
+            card_class = "lead-card" if can_move else "lead-card-simple"
             st.markdown(
-                f'<div class="lead-card">'
+                f'<div class="{card_class}" style="border-left: 4px solid {color};">'
                 f'  <div class="lead-name">{lead["name"]}</div>'
                 f'  <div class="lead-info">✉️ {lead["email"]}</div>'
-                f'  {phone_line}{source_line}{budget_line}'
+                f'  {phone_line}'
+                f'  <div style="margin-top:4px">{source_line}{budget_line}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
+
+            # ── Controles de movimentação (admin/manager) ─────────────────────
+            if can_move:
+                dest_opts = [
+                    (sid, sname)
+                    for sid, sname in _stage_options
+                    if sid != stage["id"]
+                ]
+                dest_labels = [s[1] for s in dest_opts]
+                dest_id_map = {s[1]: s[0] for s in dest_opts}
+
+                st.markdown('<div class="card-move-area">', unsafe_allow_html=True)
+                c1, c2 = st.columns([3, 1])
+                with c1:
+                    dest = st.selectbox(
+                        "etapa",
+                        dest_labels,
+                        key=f"dest_{lead['id']}",
+                        label_visibility="collapsed",
+                    )
+                with c2:
+                    move_clicked = st.button(
+                        "→",
+                        key=f"mv_{lead['id']}",
+                        use_container_width=True,
+                        help=f"Mover para {dest}",
+                    )
+                st.markdown('</div>', unsafe_allow_html=True)
+
+                if move_clicked:
+                    try:
+                        move_lead(lead["id"], dest_id_map[dest], token)
+                        st.session_state["_move_ok"] = (
+                            f"**{lead['name']}** movido para **{dest}** com sucesso."
+                        )
+                    except Exception as e:
+                        err = getattr(e, "response", None)
+                        detail = err.json().get("detail", str(e)) if err else str(e)
+                        st.session_state["_move_err"] = f"Erro ao mover: {detail}"
+                    st.rerun()
 
 # ── Atividades Recentes ───────────────────────────────────────────────────────
 st.divider()

@@ -91,6 +91,17 @@ def get_lead_timeline(lead_id: int, token: str, page: int = 1, limit: int = 50) 
         return {"items": [], "total": 0, "page": 1, "limit": limit, "pages": 1}
 
 
+def move_lead(lead_id: int, stage_id: int, token: str) -> dict:
+    res = requests.patch(
+        f"{API_URL}/leads/{lead_id}/move",
+        json={"stage_id": stage_id},
+        headers=_headers(token),
+        timeout=5,
+    )
+    res.raise_for_status()
+    return res.json()
+
+
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 
 def get_board(token: str) -> list:
