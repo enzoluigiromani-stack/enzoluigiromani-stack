@@ -3,6 +3,7 @@ from api import (
     register, login, get_me, get_workspace, get_workspace_settings,
     update_workspace_settings, get_leads, get_board, create_lead,
     move_lead, get_activities, get_lead_timeline,
+    get_tasks, create_task, complete_task, refresh_tasks,
 )
 
 st.set_page_config(
@@ -98,20 +99,45 @@ st.markdown("""
     .role-admin   { background:#fee2e2; color:#b91c1c; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; display:inline-block; }
     .role-manager { background:#fef9c3; color:#92400e; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; display:inline-block; }
     .role-sales   { background:#dcfce7; color:#15803d; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; display:inline-block; }
+    .task-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-bottom: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .task-title   { font-weight: 700; font-size: 14px; color: #1e293b; margin-bottom: 4px; }
+    .task-meta    { font-size: 12px; color: #64748b; margin-top: 4px; }
+    .task-desc    { font-size: 12px; color: #94a3b8; margin-top: 3px; }
+    .badge-priority-high   { background:#fee2e2; color:#b91c1c; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; display:inline-block; margin-right:4px; }
+    .badge-priority-medium { background:#fef9c3; color:#92400e; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; display:inline-block; margin-right:4px; }
+    .badge-priority-low    { background:#dcfce7; color:#15803d; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; display:inline-block; margin-right:4px; }
+    .badge-status-pending   { background:#dbeafe; color:#1d4ed8; font-size:11px; padding:2px 8px; border-radius:99px; display:inline-block; margin-right:4px; }
+    .badge-status-overdue   { background:#fee2e2; color:#b91c1c; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; display:inline-block; margin-right:4px; }
+    .badge-status-completed { background:#dcfce7; color:#15803d; font-size:11px; padding:2px 8px; border-radius:99px; display:inline-block; margin-right:4px; }
 </style>
 """, unsafe_allow_html=True)
 
 _CURRENCY_SYMBOL = {"BRL": "R$", "USD": "$", "EUR": "€", "GBP": "£"}
 
 _ACTIVITY_ICON = {
-    "lead_created":  "🟢",
-    "lead_updated":  "✏️",
-    "lead_moved":    "↗️",
-    "email_sent":    "📧",
-    "whatsapp_sent": "📱",
-    "user_login":    "🔐",
-    "stage_created": "🏷️",
+    "lead_created":    "🟢",
+    "lead_updated":    "✏️",
+    "lead_moved":      "↗️",
+    "email_sent":      "📧",
+    "whatsapp_sent":   "📱",
+    "user_login":      "🔐",
+    "stage_created":   "🏷️",
+    "task_created":    "📋",
+    "task_completed":  "✅",
+    "followup_created":"🔔",
 }
+
+_PRIORITY_COLOR = {"high": "#ef4444", "medium": "#f59e0b", "low": "#22c55e"}
+_PRIORITY_LABEL = {"high": "Alta", "medium": "Média", "low": "Baixa"}
+_STATUS_COLOR   = {"pending": "#3b82f6", "overdue": "#ef4444", "completed": "#22c55e"}
+_STATUS_LABEL   = {"pending": "Pendente", "overdue": "Atrasada", "completed": "Concluída"}
 
 
 def _currency_fmt(value: float, currency: str) -> str:
@@ -442,3 +468,168 @@ with col_tl:
                 )
             st.markdown(rows_html, unsafe_allow_html=True)
             st.caption(f"Total: {tl_data['total']} evento(s)")
+
+
+# ── Painel de Tarefas ─────────────────────────────────────────────────────────
+st.divider()
+st.markdown("## 📋 Tarefas & Follow-ups")
+
+# Feedback de tarefa
+if "_task_ok" in st.session_state:
+    st.success(st.session_state.pop("_task_ok"))
+if "_task_err" in st.session_state:
+    st.error(st.session_state.pop("_task_err"))
+
+
+def _task_card_html(t: dict) -> str:
+    priority   = t.get("priority", "medium")
+    status     = t.get("status", "pending")
+    due        = t["due_date"][:16].replace("T", " ") if t.get("due_date") else "—"
+    lead_badge = f'<span class="badge">👤 {t["lead_name"]}</span>' if t.get("lead_name") else ""
+    user_badge = f'<span class="badge">🧑 {t["assigned_user_name"]}</span>' if t.get("assigned_user_name") else ""
+    desc_line  = f'<div class="task-desc">{t["description"]}</div>' if t.get("description") else ""
+    return (
+        f'<div class="task-card" style="border-left: 4px solid {_PRIORITY_COLOR.get(priority, "#94a3b8")};">'
+        f'  <div class="task-title">{t["title"]}</div>'
+        f'  {desc_line}'
+        f'  <div style="margin-top:6px">'
+        f'    <span class="badge-priority-{priority}">⚡ {_PRIORITY_LABEL.get(priority, priority)}</span>'
+        f'    <span class="badge-status-{status}">{_STATUS_LABEL.get(status, status)}</span>'
+        f'    {lead_badge}{user_badge}'
+        f'  </div>'
+        f'  <div class="task-meta">📅 Vence: {due}</div>'
+        f'</div>'
+    )
+
+
+tab_hoje, tab_atrasadas, tab_agenda, tab_nova = st.tabs(
+    ["📅 Hoje", "🚨 Atrasadas", "🗓️ Agenda", "➕ Nova Tarefa"]
+)
+
+# ── Aba: Hoje ────────────────────────────────────────────────────────────────
+with tab_hoje:
+    today_data  = get_tasks(token, due_today=True, limit=50)
+    today_items = today_data.get("items", [])
+    st.caption(f"{len(today_items)} tarefa(s) para hoje")
+
+    if not today_items:
+        st.info("Nenhuma tarefa para hoje. 🎉")
+    else:
+        for t in today_items:
+            st.markdown(_task_card_html(t), unsafe_allow_html=True)
+            if t["status"] != "completed":
+                if st.button("✅ Concluir", key=f"done_today_{t['id']}"):
+                    try:
+                        complete_task(t["id"], token)
+                        st.session_state["_task_ok"] = f"Tarefa **{t['title']}** concluída!"
+                    except Exception as e:
+                        st.session_state["_task_err"] = str(e)
+                    st.rerun()
+
+# ── Aba: Atrasadas ───────────────────────────────────────────────────────────
+with tab_atrasadas:
+    overdue_data  = get_tasks(token, overdue_only=True, limit=50)
+    overdue_items = overdue_data.get("items", [])
+    st.caption(f"{overdue_items and len(overdue_items) or 0} tarefa(s) atrasada(s)")
+
+    if not overdue_items:
+        st.success("Nenhuma tarefa atrasada!")
+    else:
+        for t in overdue_items:
+            st.markdown(_task_card_html(t), unsafe_allow_html=True)
+            if st.button("✅ Concluir", key=f"done_over_{t['id']}"):
+                try:
+                    complete_task(t["id"], token)
+                    st.session_state["_task_ok"] = f"Tarefa **{t['title']}** concluída!"
+                except Exception as e:
+                    st.session_state["_task_err"] = str(e)
+                st.rerun()
+
+# ── Aba: Agenda ──────────────────────────────────────────────────────────────
+with tab_agenda:
+    col_filt1, col_filt2, col_sync = st.columns([2, 2, 1])
+    with col_filt1:
+        filt_status = st.selectbox(
+            "Status", ["Todos", "Pendente", "Atrasada", "Concluída"],
+            key="agenda_status", label_visibility="collapsed",
+        )
+    with col_filt2:
+        filt_priority = st.selectbox(
+            "Prioridade", ["Todas", "Alta", "Média", "Baixa"],
+            key="agenda_priority", label_visibility="collapsed",
+        )
+    with col_sync:
+        if role in ("admin", "manager") and st.button("🔄", help="Criar lembretes para leads parados", use_container_width=True):
+            try:
+                r = refresh_tasks(token)
+                st.session_state["_task_ok"] = (
+                    f"Sincronizado: {r.get('overdue_updated',0)} overdue, "
+                    f"{r.get('reminders_created',0)} lembretes criados."
+                )
+            except Exception as e:
+                st.session_state["_task_err"] = str(e)
+            st.rerun()
+
+    _status_map   = {"Todos": None, "Pendente": "pending", "Atrasada": "overdue", "Concluída": "completed"}
+    _priority_map = {"Todas": None, "Alta": "high", "Média": "medium", "Baixa": "low"}
+    agenda_data  = get_tasks(
+        token,
+        status=_status_map[filt_status],
+        priority=_priority_map[filt_priority],
+        limit=100,
+    )
+    agenda_items = agenda_data.get("items", [])
+    st.caption(f"{agenda_data.get('total', 0)} tarefa(s)")
+
+    if not agenda_items:
+        st.info("Nenhuma tarefa encontrada com esses filtros.")
+    else:
+        for t in agenda_items:
+            st.markdown(_task_card_html(t), unsafe_allow_html=True)
+            if t["status"] != "completed":
+                if st.button("✅ Concluir", key=f"done_ag_{t['id']}"):
+                    try:
+                        complete_task(t["id"], token)
+                        st.session_state["_task_ok"] = f"Tarefa **{t['title']}** concluída!"
+                    except Exception as e:
+                        st.session_state["_task_err"] = str(e)
+                    st.rerun()
+
+# ── Aba: Nova Tarefa ─────────────────────────────────────────────────────────
+with tab_nova:
+    with st.form("form_task", clear_on_submit=True):
+        t_title    = st.text_input("Título *")
+        t_desc     = st.text_area("Descrição", height=80)
+        tc1, tc2   = st.columns(2)
+        with tc1:
+            t_priority = st.selectbox("Prioridade", ["Média", "Alta", "Baixa"])
+        with tc2:
+            t_due = st.date_input("Vencimento")
+        t_lead_sel = st.selectbox(
+            "Lead (opcional)",
+            ["— nenhum —"] + [f'{l["name"]} ({l["email"]})' for l in leads],
+            key="task_lead_sel",
+        )
+        t_submit = st.form_submit_button("Criar Tarefa", use_container_width=True, type="primary")
+
+    if t_submit:
+        if not t_title:
+            st.error("Título é obrigatório.")
+        else:
+            _prio_map = {"Alta": "high", "Média": "medium", "Baixa": "low"}
+            payload: dict = {
+                "title":    t_title,
+                "priority": _prio_map[t_priority],
+                "due_date": t_due.isoformat() + "T09:00:00",
+            }
+            if t_desc:
+                payload["description"] = t_desc
+            if t_lead_sel != "— nenhum —":
+                lead_label_map = {f'{l["name"]} ({l["email"]})': l["id"] for l in leads}
+                payload["lead_id"] = lead_label_map.get(t_lead_sel)
+            try:
+                create_task(payload, token)
+                st.session_state["_task_ok"] = f"Tarefa **{t_title}** criada!"
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro: {e}")

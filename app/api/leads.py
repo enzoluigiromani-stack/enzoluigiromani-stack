@@ -14,6 +14,7 @@ from app.services.activity_service import log_activity
 from app.services.permissions import require_manager, require_sales
 from app.services.workspace import require_workspace
 from app.services.notifications import notify_new_lead, notify_lead_moved
+from app.services.task_service import create_followup_task
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -178,6 +179,20 @@ def move_lead(
         lead_id=lead.id,
         meta={"from_stage": old_stage.name if old_stage else None, "to_stage": stage.name},
     )
+
+    # Follow-up automático ao entrar em "contato"
+    if stage.name == "contato":
+        task = create_followup_task(db, workspace.id, lead, stage.name)
+        log_activity(
+            db,
+            workspace_id=workspace.id,
+            type="followup_created",
+            description=f"Follow-up criado para {lead.name}",
+            user_id=current_user.id,
+            lead_id=lead.id,
+            meta={"task_id": task.id, "due_date": str(task.due_date)},
+        )
+
     background_tasks.add_task(notify_lead_moved, lead, stage.name)
     return {"message": f"Lead movido para '{stage.name}'", "lead_id": lead_id,
             "stage": jsonable_encoder(stage)}

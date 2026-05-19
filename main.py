@@ -13,8 +13,9 @@ from app.models import pipeline_stage     # noqa: F401
 from app.models import lead               # noqa: F401
 from app.models import user               # noqa: F401
 from app.models import activity           # noqa: F401
+from app.models import task               # noqa: F401
 from app.api import leads, webhook, pipeline, auth, workspace as workspace_router
-from app.api import activities
+from app.api import activities, tasks
 
 
 def _drop_stale_tables():
@@ -75,6 +76,7 @@ app.include_router(auth.router)
 app.include_router(workspace_router.router)
 app.include_router(leads.router)
 app.include_router(activities.router)
+app.include_router(tasks.router)
 app.include_router(webhook.router)
 app.include_router(pipeline.router)
 

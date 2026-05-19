@@ -14,6 +14,9 @@ ACTIVITY_TYPES = {
     "whatsapp_sent",
     "user_login",
     "stage_created",
+    "task_created",
+    "task_completed",
+    "followup_created",
 }
 
 
