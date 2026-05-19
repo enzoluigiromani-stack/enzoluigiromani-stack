@@ -20,7 +20,11 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
-def _build_query(db, workspace_id, user, status, priority, due_today, overdue_only, assigned_user_id):
+def _build_query(
+    db, workspace_id, user, status, priority,
+    due_today, overdue_only, assigned_user_id,
+    due_date_from=None, due_date_to=None,
+):
     query = db.query(Task).filter(Task.workspace_id == workspace_id)
     if user.role == "sales":
         query = query.filter(Task.assigned_user_id == user.id)
@@ -33,9 +37,38 @@ def _build_query(db, workspace_id, user, status, priority, due_today, overdue_on
     if due_today:
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         query = query.filter(Task.due_date >= today, Task.due_date < today + timedelta(days=1))
+    if due_date_from:
+        query = query.filter(Task.due_date >= due_date_from)
+    if due_date_to:
+        query = query.filter(Task.due_date <= due_date_to)
     if assigned_user_id:
         query = query.filter(Task.assigned_user_id == assigned_user_id)
     return query
+
+
+@router.get("/summary")
+def task_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_sales),
+    workspace: Workspace = Depends(require_workspace),
+):
+    """Contagens por status + tarefas vencendo hoje. Respeita isolamento por role."""
+    sync_overdue(db, workspace.id)
+    base = db.query(Task).filter(Task.workspace_id == workspace.id)
+    if current_user.role == "sales":
+        base = base.filter(Task.assigned_user_id == current_user.id)
+
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    return {
+        "pending":   base.filter(Task.status == "pending").count(),
+        "overdue":   base.filter(Task.status == "overdue").count(),
+        "completed": base.filter(Task.status == "completed").count(),
+        "due_today": base.filter(
+            Task.due_date >= today,
+            Task.due_date < today + timedelta(days=1),
+            Task.status.in_(["pending", "overdue"]),
+        ).count(),
+    }
 
 
 @router.post("/", response_model=TaskResponse, status_code=201)
@@ -99,6 +132,8 @@ def list_tasks(
     due_today: bool = Query(False),
     overdue_only: bool = Query(False),
     assigned_user_id: int = Query(None),
+    due_date_from: datetime = Query(None, description="ISO datetime — para filtro de calendário"),
+    due_date_to: datetime = Query(None, description="ISO datetime — para filtro de calendário"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_sales),
     workspace: Workspace = Depends(require_workspace),
@@ -107,6 +142,7 @@ def list_tasks(
     query = _build_query(
         db, workspace.id, current_user,
         status, priority, due_today, overdue_only, assigned_user_id,
+        due_date_from=due_date_from, due_date_to=due_date_to,
     )
     total = query.count()
     items = (
@@ -121,6 +157,11 @@ def list_tasks(
     )
 
 
+def _check_task_permission(task, current_user):
+    if current_user.role == "sales" and task.assigned_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Sem permissão para esta tarefa")
+
+
 @router.patch("/{task_id}/complete", response_model=TaskResponse)
 def complete_task(
     task_id: int,
@@ -131,6 +172,7 @@ def complete_task(
     task = db.query(Task).filter(Task.id == task_id, Task.workspace_id == workspace.id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")
+    _check_task_permission(task, current_user)
     task.status = "completed"
     task.completed_at = datetime.utcnow()
     db.commit()
@@ -155,6 +197,7 @@ def update_task_status(
     task = db.query(Task).filter(Task.id == task_id, Task.workspace_id == workspace.id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")
+    _check_task_permission(task, current_user)
     if data.status:
         task.status = data.status
         if data.status == "completed":

@@ -3,7 +3,7 @@ from api import (
     register, login, get_me, get_workspace, get_workspace_settings,
     update_workspace_settings, get_leads, get_board, create_lead,
     move_lead, get_activities, get_lead_timeline,
-    get_tasks, create_task, complete_task, refresh_tasks,
+    get_tasks, create_task, complete_task, refresh_tasks, get_task_summary,
 )
 
 st.set_page_config(
@@ -501,6 +501,14 @@ def _task_card_html(t: dict) -> str:
         f'</div>'
     )
 
+
+# ── Dashboard de métricas de tarefas ─────────────────────────────────────────
+_summary = get_task_summary(token)
+tm1, tm2, tm3, tm4 = st.columns(4)
+tm1.metric("⏳ Pendentes",  _summary.get("pending", 0))
+tm2.metric("🚨 Atrasadas",  _summary.get("overdue", 0))
+tm3.metric("📅 Vencem Hoje", _summary.get("due_today", 0))
+tm4.metric("✅ Concluídas", _summary.get("completed", 0))
 
 tab_hoje, tab_atrasadas, tab_agenda, tab_nova = st.tabs(
     ["📅 Hoje", "🚨 Atrasadas", "🗓️ Agenda", "➕ Nova Tarefa"]

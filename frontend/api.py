@@ -124,6 +124,16 @@ def complete_task(task_id: int, token: str) -> dict:
     return res.json()
 
 
+def get_task_summary(token: str) -> dict:
+    try:
+        res = requests.get(f"{API_URL}/tasks/summary",
+                           headers=_headers(token), timeout=5)
+        res.raise_for_status()
+        return res.json()
+    except Exception:
+        return {"pending": 0, "overdue": 0, "completed": 0, "due_today": 0}
+
+
 def refresh_tasks(token: str) -> dict:
     try:
         res = requests.post(f"{API_URL}/tasks/refresh",
