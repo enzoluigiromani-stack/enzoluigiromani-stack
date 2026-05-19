@@ -14,6 +14,7 @@ from app.models import lead               # noqa: F401
 from app.models import user               # noqa: F401
 from app.models import activity           # noqa: F401
 from app.models import task               # noqa: F401
+from app.models import lead_capture_event  # noqa: F401
 from app.api import leads, webhook, pipeline, auth, workspace as workspace_router
 from app.api import activities, tasks
 
@@ -47,10 +48,19 @@ def _migrate_columns():
 
         lead_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(leads)"))}
         for col, ddl in [
-            ("stage_id",     "INTEGER"),
-            ("budget",       "REAL"),
-            ("user_id",      "INTEGER"),
-            ("workspace_id", "INTEGER REFERENCES workspaces(id)"),
+            ("stage_id",           "INTEGER"),
+            ("budget",             "REAL"),
+            ("user_id",            "INTEGER"),
+            ("workspace_id",       "INTEGER REFERENCES workspaces(id)"),
+            ("utm_source",         "VARCHAR"),
+            ("utm_campaign",       "VARCHAR"),
+            ("utm_medium",         "VARCHAR"),
+            ("utm_content",        "VARCHAR"),
+            ("utm_term",           "VARCHAR"),
+            ("campaign_name",      "VARCHAR"),
+            ("adset_name",         "VARCHAR"),
+            ("ad_name",            "VARCHAR"),
+            ("external_source_id", "VARCHAR"),
         ]:
             if col not in lead_cols:
                 conn.execute(text(f"ALTER TABLE leads ADD COLUMN {col} {ddl}"))
