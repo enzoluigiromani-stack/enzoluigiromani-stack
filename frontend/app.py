@@ -452,17 +452,18 @@ for i, item in enumerate(board):
 
             # Classe do card: com ou sem área de movimentação abaixo
             card_class = "lead-card" if can_move else "lead-card-simple"
-            st.markdown(
-                f'<div class="{card_class}" style="border-left: 4px solid {color};">'
-                f'  <div class="lead-name">{lead["name"]}</div>'
-                f'  <div class="lead-info">✉️ {lead["email"]}</div>'
-                f'  {phone_line}'
-                f'  <div style="margin-top:4px">{source_line}{budget_line}</div>'
-                f'  {f\'<div style="margin-top:4px">{tag_html}</div>\' if tag_html else ""}'
-                f'  {utm_html}'
-                f'</div>',
-                unsafe_allow_html=True,
+            tag_row = '<div style="margin-top:4px">' + tag_html + '</div>' if tag_html else ""
+            card_html = (
+                '<div class="' + card_class + '" style="border-left: 4px solid ' + color + ';">'
+                + '<div class="lead-name">' + lead["name"] + '</div>'
+                + '<div class="lead-info">✉️ ' + lead["email"] + '</div>'
+                + phone_line
+                + '<div style="margin-top:4px">' + source_line + budget_line + '</div>'
+                + tag_row
+                + utm_html
+                + '</div>'
             )
+            st.markdown(card_html, unsafe_allow_html=True)
 
             # ── Controles de movimentação (admin/manager) ─────────────────────
             if can_move:
