@@ -5,6 +5,8 @@ from api import (
     move_lead, get_activities, get_lead_timeline,
     get_tasks, create_task, complete_task, refresh_tasks, get_task_summary,
     get_capture_events, get_capture_stats, post_meta_test,
+    get_conversations, create_conversation, update_conversation,
+    get_inbox_messages, send_inbox_message,
 )
 
 st.set_page_config(
@@ -117,6 +119,27 @@ st.markdown("""
     .badge-status-pending   { background:#dbeafe; color:#1d4ed8; font-size:11px; padding:2px 8px; border-radius:99px; display:inline-block; margin-right:4px; }
     .badge-status-overdue   { background:#fee2e2; color:#b91c1c; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; display:inline-block; margin-right:4px; }
     .badge-status-completed { background:#dcfce7; color:#15803d; font-size:11px; padding:2px 8px; border-radius:99px; display:inline-block; margin-right:4px; }
+    /* ── Inbox ── */
+    .ib-conv-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px; margin-bottom:6px; }
+    .ib-conv-card.ib-active { border-left:4px solid #6366f1; background:#f5f3ff; }
+    .ib-conv-lead { font-weight:700; font-size:14px; color:#1e293b; }
+    .ib-conv-sub  { font-size:12px; color:#64748b; margin-top:2px; }
+    .ib-conv-ts   { font-size:11px; color:#94a3b8; margin-top:2px; }
+    .ib-badge-open   { background:#dcfce7; color:#15803d; font-size:10px; font-weight:700; padding:1px 7px; border-radius:99px; display:inline-block; }
+    .ib-badge-closed { background:#f1f5f9; color:#64748b; font-size:10px; font-weight:700; padding:1px 7px; border-radius:99px; display:inline-block; }
+    .ib-chat-area { height:380px; overflow-y:auto; padding:10px 6px; border:1px solid #e2e8f0; border-radius:10px; background:#fafafa; margin-bottom:8px; }
+    .ib-bubble-wrap { display:flex; margin:5px 0; }
+    .ib-bubble-user { margin-left:auto; max-width:65%; }
+    .ib-bubble-lead { margin-right:auto; max-width:65%; }
+    .ib-bubble-sys  { margin:3px auto; max-width:75%; text-align:center; }
+    .ib-bubble-user .ib-body { background:#6366f1; color:#fff; border-radius:18px 18px 4px 18px; padding:9px 13px; font-size:14px; }
+    .ib-bubble-lead .ib-body { background:#f1f5f9; color:#1e293b; border-radius:18px 18px 18px 4px; padding:9px 13px; font-size:14px; }
+    .ib-bubble-sys  .ib-body { background:#fef9c3; color:#92400e; border-radius:8px; padding:5px 12px; font-size:12px; }
+    .ib-bubble-user .ib-ts   { font-size:10px; color:#94a3b8; text-align:right; margin-top:2px; padding:0 3px; }
+    .ib-bubble-lead .ib-ts   { font-size:10px; color:#94a3b8; margin-top:2px; padding:0 3px; }
+    .ib-chat-header { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:10px 14px; margin-bottom:8px; }
+    .ib-chat-title  { font-size:16px; font-weight:700; color:#1e293b; }
+    .ib-chat-meta   { font-size:12px; color:#64748b; margin-top:2px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -858,3 +881,217 @@ else:
                         st.json(result.get("envelope", {}))
                 except Exception as e:
                     st.error(f"Erro: {e}")
+
+
+# ── Inbox Omnichannel ─────────────────────────────────────────────────────────
+st.divider()
+st.markdown("## 📬 Inbox Omnichannel")
+
+_IB_CH_ICON  = {"whatsapp": "📱", "email": "📧", "sms": "💬"}
+_IB_CH_LABEL = {"whatsapp": "WhatsApp", "email": "E-mail", "sms": "SMS"}
+_IB_ST_LABEL = {"open": "Aberta", "closed": "Encerrada"}
+_IB_STATUS_MAP  = {"Abertas": "open", "Encerradas": "closed", "Todas": None}
+_IB_CHANNEL_MAP = {"Todos": None, "WhatsApp": "whatsapp", "Email": "email", "SMS": "sms"}
+
+
+def _ib_ts(iso: str) -> str:
+    return (iso or "")[:16].replace("T", " ")
+
+
+def _ib_conv_html(conv: dict, active: bool) -> str:
+    ch    = conv.get("channel", "")
+    icon  = _IB_CH_ICON.get(ch, "💬")
+    label = _IB_CH_LABEL.get(ch, ch)
+    lead  = conv.get("lead_name") or "Sem lead"
+    ts    = _ib_ts(conv.get("last_message_at") or conv.get("created_at", ""))
+    st_b  = "ib-badge-open" if conv["status"] == "open" else "ib-badge-closed"
+    st_l  = _IB_ST_LABEL.get(conv["status"], conv["status"])
+    cls   = "ib-conv-card ib-active" if active else "ib-conv-card"
+    subj  = (" · " + conv["subject"]) if conv.get("subject") else ""
+    return (
+        '<div class="' + cls + '">'
+        + '<div class="ib-conv-lead">' + icon + " " + lead + '</div>'
+        + '<div class="ib-conv-sub">' + label + subj + '</div>'
+        + '<div class="ib-conv-ts">' + ts + '&nbsp;<span class="' + st_b + '">' + st_l + '</span></div>'
+        + '</div>'
+    )
+
+
+def _ib_bubble_html(msg: dict) -> str:
+    st_type = msg.get("sender_type", "system")
+    cls     = {"user": "ib-bubble-user", "lead": "ib-bubble-lead"}.get(st_type, "ib-bubble-sys")
+    ts      = _ib_ts(msg.get("created_at", ""))
+    body    = msg.get("content", "").replace("<", "&lt;").replace(">", "&gt;")
+    return (
+        '<div class="ib-bubble-wrap">'
+        '<div class="' + cls + '">'
+        '<div class="ib-body">' + body + '</div>'
+        '<div class="ib-ts">' + ts + '</div>'
+        '</div></div>'
+    )
+
+
+# Filtros
+ib_f1, ib_f2, ib_f3, ib_f4 = st.columns([2, 2, 1, 1])
+with ib_f1:
+    ib_status_sel  = st.selectbox("Status", ["Abertas", "Encerradas", "Todas"], key="ib_main_status")
+with ib_f2:
+    ib_channel_sel = st.selectbox("Canal",  ["Todos", "WhatsApp", "Email", "SMS"], key="ib_main_channel")
+with ib_f3:
+    if st.button("🔄 Atualizar", key="ib_main_refresh", use_container_width=True):
+        for k in [k for k in st.session_state if k.startswith("ib_msgs_")]:
+            st.session_state.pop(k)
+        st.rerun()
+with ib_f4:
+    if st.button("✖ Fechar", key="ib_close_chat", use_container_width=True):
+        st.session_state.pop("ib_selected_conv", None)
+        st.rerun()
+
+api_ib_status  = _IB_STATUS_MAP.get(ib_status_sel)
+api_ib_channel = _IB_CHANNEL_MAP.get(ib_channel_sel)
+
+conv_resp = get_conversations(token, status=api_ib_status, channel=api_ib_channel, limit=100)
+ib_convs  = conv_resp.get("items", [])
+
+ib_col_list, ib_col_chat = st.columns([1, 2], gap="medium")
+
+# ── Lista de conversas ────────────────────────────────────────────────────────
+with ib_col_list:
+    st.markdown(f"**{conv_resp.get('total', 0)} conversa(s)**")
+
+    with st.expander("➕ Nova conversa"):
+        with st.form("form_ib_nova", clear_on_submit=True):
+            nc_lead_opts = {"— sem lead —": None}
+            nc_lead_opts.update({f'{l["name"]} ({l["email"]})': l["id"] for l in leads})
+            nc_lead    = st.selectbox("Lead", list(nc_lead_opts.keys()), key="nc_lead_main")
+            nc_channel = st.selectbox("Canal", ["whatsapp", "email", "sms"],  key="nc_ch_main")
+            nc_subject = st.text_input("Assunto (e-mail)", key="nc_sub_main")
+            nc_ok      = st.form_submit_button("Abrir", use_container_width=True, type="primary")
+        if nc_ok:
+            nc_payload = {"channel": nc_channel}
+            if nc_lead_opts[nc_lead]:
+                nc_payload["lead_id"] = nc_lead_opts[nc_lead]
+            if nc_subject:
+                nc_payload["subject"] = nc_subject
+            try:
+                new_conv = create_conversation(nc_payload, token)
+                st.session_state.ib_selected_conv = new_conv["id"]
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro: {e}")
+
+    if not ib_convs:
+        st.caption("Nenhuma conversa encontrada.")
+    else:
+        ib_sel = st.session_state.get("ib_selected_conv")
+        for conv in ib_convs:
+            is_active = (conv["id"] == ib_sel)
+            st.markdown(_ib_conv_html(conv, is_active), unsafe_allow_html=True)
+            btn_lbl = "✔ Selecionada" if is_active else "Abrir"
+            if st.button(btn_lbl, key=f"ib_sel_{conv['id']}", use_container_width=True,
+                         type="primary" if is_active else "secondary"):
+                st.session_state.ib_selected_conv = conv["id"]
+                st.session_state.pop(f"ib_msgs_{conv['id']}", None)
+                st.rerun()
+
+# ── Área de chat ──────────────────────────────────────────────────────────────
+with ib_col_chat:
+    ib_sel = st.session_state.get("ib_selected_conv")
+
+    if not ib_sel:
+        st.markdown(
+            '<div style="display:flex;align-items:center;justify-content:center;'
+            'height:380px;color:#94a3b8;font-size:15px;flex-direction:column;gap:10px;">'
+            '<span style="font-size:42px">📬</span>'
+            '<span>Selecione uma conversa</span>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        ib_conv = next((c for c in ib_convs if c["id"] == ib_sel), None)
+        if not ib_conv:
+            st.warning("Conversa não encontrada na lista atual. Ajuste os filtros ou atualize.")
+        else:
+            msgs_key = f"ib_msgs_{ib_sel}"
+            if msgs_key not in st.session_state:
+                msgs_data = get_inbox_messages(token, ib_sel, limit=100)
+                st.session_state[msgs_key] = msgs_data.get("items", [])
+            ib_msgs = st.session_state[msgs_key]
+
+            ch     = ib_conv.get("channel", "")
+            icon   = _IB_CH_ICON.get(ch, "💬")
+            label  = _IB_CH_LABEL.get(ch, ch)
+            lead_n = ib_conv.get("lead_name") or "Sem lead"
+            st_b   = "ib-badge-open" if ib_conv["status"] == "open" else "ib-badge-closed"
+            st_l   = _IB_ST_LABEL.get(ib_conv["status"], ib_conv["status"])
+            subj   = (" · " + ib_conv["subject"]) if ib_conv.get("subject") else ""
+            email_ = (" · " + ib_conv["lead_email"]) if ib_conv.get("lead_email") else ""
+            phone_ = (" · 📞 " + ib_conv["lead_phone"]) if ib_conv.get("lead_phone") else ""
+
+            st.markdown(
+                '<div class="ib-chat-header">'
+                '<div class="ib-chat-title">' + icon + " " + lead_n + '</div>'
+                '<div class="ib-chat-meta">'
+                + label + subj
+                + ' · <span class="' + st_b + '">' + st_l + '</span>'
+                + email_ + phone_
+                + '</div></div>',
+                unsafe_allow_html=True,
+            )
+
+            # Ações manager+
+            if role in ("admin", "manager"):
+                ha1, ha2 = st.columns([1, 3])
+                with ha1:
+                    if ib_conv["status"] == "open":
+                        if st.button("🔒 Encerrar", key=f"ib_close_{ib_sel}", use_container_width=True):
+                            try:
+                                update_conversation(ib_sel, {"status": "closed"}, token)
+                                st.session_state.pop(msgs_key, None)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(str(e))
+                    else:
+                        if st.button("🔓 Reabrir", key=f"ib_open_{ib_sel}", use_container_width=True):
+                            try:
+                                update_conversation(ib_sel, {"status": "open"}, token)
+                                st.session_state.pop(msgs_key, None)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(str(e))
+
+            # Bolhas
+            if not ib_msgs:
+                st.info("Nenhuma mensagem ainda.")
+            else:
+                bubbles = "".join(_ib_bubble_html(m) for m in ib_msgs)
+                st.markdown('<div class="ib-chat-area">' + bubbles + '</div>', unsafe_allow_html=True)
+
+            # Envio
+            if ib_conv["status"] == "open":
+                prompt = st.chat_input(f"Mensagem via {label}…", key=f"ib_input_{ib_sel}")
+                if prompt:
+                    try:
+                        send_inbox_message({"conversation_id": ib_sel, "content": prompt}, token)
+                        st.session_state.pop(msgs_key, None)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro: {e}")
+            else:
+                st.caption("Conversa encerrada — reabra para enviar mensagens.")
+
+            # Timeline do lead
+            if ib_conv.get("lead_id"):
+                with st.expander("🕐 Timeline do lead"):
+                    tl_ib = get_lead_timeline(ib_conv["lead_id"], token, limit=15)
+                    for act in tl_ib.get("items", []):
+                        icon_a = _ACTIVITY_ICON.get(act["type"], "•")
+                        ts_a   = act.get("created_at", "")[:16].replace("T", " ")
+                        who_a  = act.get("user_name") or "Sistema"
+                        st.markdown(
+                            icon_a + " " + act["description"] + "  \n"
+                            + "<small style='color:#94a3b8'>" + who_a + " · " + ts_a + "</small>",
+                            unsafe_allow_html=True,
+                        )
+                    if not tl_ib.get("items"):
+                        st.caption("Sem atividades.")
