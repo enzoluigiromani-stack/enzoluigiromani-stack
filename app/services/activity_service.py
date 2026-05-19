@@ -21,6 +21,12 @@ ACTIVITY_TYPES = {
     "task_created",
     "task_completed",
     "followup_created",
+    # Inbox omnichannel
+    "conversation_created",
+    "conversation_closed",
+    "conversation_assigned",
+    "message_sent",
+    "message_received",
 }
 
 

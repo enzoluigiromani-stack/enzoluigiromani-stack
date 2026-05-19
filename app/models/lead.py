@@ -42,5 +42,6 @@ class Lead(Base):
     stage     = relationship("PipelineStage", back_populates="leads")
     owner     = relationship("User")
     workspace = relationship("Workspace", back_populates="leads")
-    tasks     = relationship("Task", back_populates="lead", cascade="all, delete-orphan")
+    tasks          = relationship("Task", back_populates="lead", cascade="all, delete-orphan")
     capture_events = relationship("LeadCaptureEvent", back_populates="lead")
+    conversations  = relationship("Conversation", back_populates="lead", cascade="all, delete-orphan")

@@ -15,8 +15,10 @@ from app.models import user               # noqa: F401
 from app.models import activity           # noqa: F401
 from app.models import task               # noqa: F401
 from app.models import lead_capture_event  # noqa: F401
+from app.models import conversation        # noqa: F401
+from app.models import message             # noqa: F401
 from app.api import leads, webhook, pipeline, auth, workspace as workspace_router
-from app.api import activities, tasks, lead_capture
+from app.api import activities, tasks, lead_capture, inbox
 
 
 def _drop_stale_tables():
@@ -79,8 +81,8 @@ _migrate_columns()
 
 app = FastAPI(
     title="CRM API",
-    description="API de gerenciamento de leads multi-tenant com RBAC",
-    version="4.0.0",
+    description="API de gerenciamento de leads multi-tenant com RBAC e inbox omnichannel",
+    version="5.0.0",
 )
 
 app.include_router(auth.router)
@@ -90,6 +92,7 @@ app.include_router(activities.router)
 app.include_router(tasks.router)
 app.include_router(webhook.router)
 app.include_router(lead_capture.router)
+app.include_router(inbox.router)
 app.include_router(pipeline.router)
 
 
