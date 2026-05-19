@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 from app.schemas.pipeline_stage import PipelineStageResponse
 
@@ -24,6 +24,9 @@ class LeadBase(BaseModel):
     adset_name:         Optional[str] = None
     ad_name:            Optional[str] = None
     external_source_id: Optional[str] = None
+
+    # Tags automáticas
+    tags: Optional[List[str]] = None
 
 
 class LeadCreate(LeadBase):

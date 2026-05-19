@@ -10,6 +10,10 @@ ACTIVITY_TYPES = {
     "lead_created",
     "lead_updated",
     "lead_moved",
+    "lead_captured",               # lead novo via webhook/captura automática
+    "lead_updated_from_webhook",   # lead existente atualizado via webhook
+    "lead_capture_error",          # payload inválido salvo para auditoria
+    "lead_tagged",                 # tags automáticas aplicadas
     "email_sent",
     "whatsapp_sent",
     "user_login",

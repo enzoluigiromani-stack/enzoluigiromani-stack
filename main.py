@@ -16,7 +16,7 @@ from app.models import activity           # noqa: F401
 from app.models import task               # noqa: F401
 from app.models import lead_capture_event  # noqa: F401
 from app.api import leads, webhook, pipeline, auth, workspace as workspace_router
-from app.api import activities, tasks
+from app.api import activities, tasks, lead_capture
 
 
 def _drop_stale_tables():
@@ -61,6 +61,7 @@ def _migrate_columns():
             ("adset_name",         "VARCHAR"),
             ("ad_name",            "VARCHAR"),
             ("external_source_id", "VARCHAR"),
+            ("tags",               "TEXT"),
         ]:
             if col not in lead_cols:
                 conn.execute(text(f"ALTER TABLE leads ADD COLUMN {col} {ddl}"))
@@ -88,6 +89,7 @@ app.include_router(leads.router)
 app.include_router(activities.router)
 app.include_router(tasks.router)
 app.include_router(webhook.router)
+app.include_router(lead_capture.router)
 app.include_router(pipeline.router)
 
 

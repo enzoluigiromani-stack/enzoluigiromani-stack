@@ -4,6 +4,7 @@ from api import (
     update_workspace_settings, get_leads, get_board, create_lead,
     move_lead, get_activities, get_lead_timeline,
     get_tasks, create_task, complete_task, refresh_tasks, get_task_summary,
+    get_capture_events, get_capture_stats, post_meta_test,
 )
 
 st.set_page_config(
@@ -122,16 +123,41 @@ st.markdown("""
 _CURRENCY_SYMBOL = {"BRL": "R$", "USD": "$", "EUR": "€", "GBP": "£"}
 
 _ACTIVITY_ICON = {
-    "lead_created":    "🟢",
-    "lead_updated":    "✏️",
-    "lead_moved":      "↗️",
-    "email_sent":      "📧",
-    "whatsapp_sent":   "📱",
-    "user_login":      "🔐",
-    "stage_created":   "🏷️",
-    "task_created":    "📋",
-    "task_completed":  "✅",
-    "followup_created":"🔔",
+    "lead_created":              "🟢",
+    "lead_updated":              "✏️",
+    "lead_moved":                "↗️",
+    "lead_captured":             "📡",
+    "lead_updated_from_webhook": "🔄",
+    "lead_capture_error":        "⚠️",
+    "lead_tagged":               "🏷️",
+    "email_sent":                "📧",
+    "whatsapp_sent":             "📱",
+    "user_login":                "🔐",
+    "stage_created":             "🏷️",
+    "task_created":              "📋",
+    "task_completed":            "✅",
+    "followup_created":          "🔔",
+}
+
+_TAG_STYLE = {
+    "facebook":   ("background:#1877f2;color:#fff",  "fb"),
+    "google":     ("background:#ea4335;color:#fff",  "G"),
+    "tiktok":     ("background:#010101;color:#fff",  "tt"),
+    "organic":    ("background:#22c55e;color:#fff",  "org"),
+    "paid":       ("background:#8b5cf6;color:#fff",  "paid"),
+    "referral":   ("background:#f59e0b;color:#fff",  "ref"),
+    "high_ticket":("background:#fbbf24;color:#1e293b","💰"),
+}
+
+_SOURCE_LABEL = {
+    "meta_lead_ads":    "Meta Lead Ads",
+    "custom":           "Formulário",
+    "landing_page":     "Landing Page",
+    "google_lead_forms":"Google Leads",
+    "tiktok_ads":       "TikTok Ads",
+    "zapier":           "Zapier",
+    "n8n":              "n8n",
+    "unknown":          "Desconhecido",
 }
 
 _PRIORITY_COLOR = {"high": "#ef4444", "medium": "#f59e0b", "low": "#22c55e"}
@@ -143,6 +169,35 @@ _STATUS_LABEL   = {"pending": "Pendente", "overdue": "Atrasada", "completed": "C
 def _currency_fmt(value: float, currency: str) -> str:
     symbol = _CURRENCY_SYMBOL.get(currency, currency)
     return f"{symbol} {value:,.2f}"
+
+
+def _tag_badges_html(tags: list | None) -> str:
+    if not tags:
+        return ""
+    parts = []
+    for tag in tags:
+        style, label = _TAG_STYLE.get(tag, ("background:#e2e8f0;color:#475569", tag))
+        parts.append(
+            f'<span style="display:inline-block;{style};font-size:10px;font-weight:700;'
+            f'padding:1px 6px;border-radius:99px;margin-right:3px;">{label}</span>'
+        )
+    return "".join(parts)
+
+
+def _utm_info_html(lead: dict) -> str:
+    parts = []
+    if lead.get("utm_source"):
+        parts.append(lead["utm_source"])
+    if lead.get("campaign_name"):
+        parts.append(f'<em>{lead["campaign_name"]}</em>')
+    elif lead.get("utm_campaign"):
+        parts.append(f'<em>{lead["utm_campaign"]}</em>')
+    if not parts:
+        return ""
+    return (
+        f'<div style="font-size:11px;color:#94a3b8;margin-top:2px;">'
+        f'📡 {"&nbsp;·&nbsp;".join(parts)}</div>'
+    )
 
 
 # ── Tela de autenticação ───────────────────────────────────────────────────────
@@ -318,6 +373,45 @@ if "_move_err" in st.session_state:
 st.divider()
 
 
+# ── Filtros de campanha ───────────────────────────────────────────────────────
+with st.expander("🔍 Filtrar por Campanha / Origem", expanded=False):
+    _all_sources   = sorted({l.get("utm_source") or l.get("source") or "" for l in leads if l.get("utm_source") or l.get("source")})
+    _all_campaigns = sorted({l.get("campaign_name") or l.get("utm_campaign") or "" for l in leads if l.get("campaign_name") or l.get("utm_campaign")})
+    _all_tags      = sorted({t for l in leads for t in (l.get("tags") or [])})
+
+    fc1, fc2, fc3 = st.columns(3)
+    with fc1:
+        filt_source = st.selectbox("Origem", ["Todas"] + _all_sources, key="filt_source")
+    with fc2:
+        filt_campaign = st.selectbox("Campanha", ["Todas"] + _all_campaigns, key="filt_campaign")
+    with fc3:
+        filt_tag = st.selectbox("Tag", ["Todas"] + _all_tags, key="filt_tag")
+
+    if st.button("Limpar Filtros", key="clear_filters"):
+        st.session_state.pop("filt_source", None)
+        st.session_state.pop("filt_campaign", None)
+        st.session_state.pop("filt_tag", None)
+        st.rerun()
+
+
+def _lead_passes_filter(lead: dict) -> bool:
+    src      = st.session_state.get("filt_source", "Todas")
+    camp     = st.session_state.get("filt_campaign", "Todas")
+    tag_filt = st.session_state.get("filt_tag", "Todas")
+    if src != "Todas":
+        lead_src = lead.get("utm_source") or lead.get("source") or ""
+        if lead_src != src:
+            return False
+    if camp != "Todas":
+        lead_camp = lead.get("campaign_name") or lead.get("utm_campaign") or ""
+        if lead_camp != camp:
+            return False
+    if tag_filt != "Todas":
+        if tag_filt not in (lead.get("tags") or []):
+            return False
+    return True
+
+
 # ── Kanban ────────────────────────────────────────────────────────────────────
 
 # Mapa de etapas: id → nome e nome → id (usado nos selectboxes de movimentação)
@@ -341,17 +435,20 @@ for i, item in enumerate(board):
             unsafe_allow_html=True,
         )
 
-        if not stage_leads:
+        visible_leads = [l for l in stage_leads if _lead_passes_filter(l)]
+        if not visible_leads:
             st.markdown('<div class="empty-stage">Nenhum lead</div>', unsafe_allow_html=True)
             continue
 
-        for lead in stage_leads:
+        for lead in visible_leads:
             phone_line  = f'<div class="lead-info">📞 {lead["phone"]}</div>' if lead.get("phone") else ""
             source_line = f'<span class="badge">📍 {lead["source"]}</span>' if lead.get("source") else ""
             budget_line = (
                 f'<span class="badge-budget">💰 {_currency_fmt(lead["budget"], currency)}</span>'
                 if lead.get("budget") else ""
             )
+            tag_html = _tag_badges_html(lead.get("tags"))
+            utm_html = _utm_info_html(lead)
 
             # Classe do card: com ou sem área de movimentação abaixo
             card_class = "lead-card" if can_move else "lead-card-simple"
@@ -361,6 +458,8 @@ for i, item in enumerate(board):
                 f'  <div class="lead-info">✉️ {lead["email"]}</div>'
                 f'  {phone_line}'
                 f'  <div style="margin-top:4px">{source_line}{budget_line}</div>'
+                f'  {f\'<div style="margin-top:4px">{tag_html}</div>\' if tag_html else ""}'
+                f'  {utm_html}'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -641,3 +740,120 @@ with tab_nova:
                 st.rerun()
             except Exception as e:
                 st.error(f"Erro: {e}")
+
+
+# ── Painel de Captura Automática ──────────────────────────────────────────────
+st.divider()
+st.markdown("## 📡 Captura Automática de Leads")
+
+if role not in ("admin", "manager"):
+    st.info("Painel disponível apenas para manager e admin.")
+else:
+    tab_eventos, tab_stats, tab_teste = st.tabs(
+        ["📋 Eventos", "📊 Estatísticas", "🧪 Teste Meta"]
+    )
+
+    # ── Aba: Eventos ─────────────────────────────────────────────────────────
+    with tab_eventos:
+        ev_col1, ev_col2 = st.columns([2, 1])
+        with ev_col1:
+            ev_source = st.selectbox(
+                "Plataforma",
+                ["Todas", "meta_lead_ads", "custom", "landing_page",
+                 "google_lead_forms", "tiktok_ads", "zapier", "n8n"],
+                key="ev_source",
+            )
+        with ev_col2:
+            ev_proc = st.selectbox("Status", ["Todos", "Processado", "Com erro"], key="ev_proc")
+
+        src_param  = None if ev_source == "Todas" else ev_source
+        proc_param = None
+        if ev_proc == "Processado": proc_param = True
+        if ev_proc == "Com erro":   proc_param = False
+
+        ev_data  = get_capture_events(token, page=1, limit=50, source=src_param, processed=proc_param)
+        ev_items = ev_data.get("items", [])
+        st.caption(f"{ev_data.get('total', 0)} evento(s)")
+
+        if not ev_items:
+            st.info("Nenhum evento de captura encontrado.")
+        else:
+            for ev in ev_items:
+                src_label = _SOURCE_LABEL.get(ev["source"], ev["source"])
+                ts        = (ev.get("created_at") or "")[:16].replace("T", " ")
+                status_icon = "✅" if ev["processed"] else "❌"
+                lead_link   = f'Lead #{ev["lead_id"]}' if ev.get("lead_id") else "—"
+                err_text    = f' · `{ev["error"]}`' if ev.get("error") else ""
+                st.markdown(
+                    f'{status_icon} **{src_label}** · {ts} · {lead_link}{err_text}'
+                )
+
+    # ── Aba: Estatísticas ─────────────────────────────────────────────────────
+    with tab_stats:
+        stats = get_capture_stats(token)
+        sc1, sc2, sc3 = st.columns(3)
+        sc1.metric("Total de Eventos", stats.get("total", 0))
+        sc2.metric("✅ Processados",   stats.get("processed", 0))
+        sc3.metric("❌ Com Erro",      stats.get("failed", 0))
+
+        by_source = stats.get("by_source", {})
+        if by_source:
+            st.markdown("#### Por plataforma")
+            for src, counts in by_source.items():
+                label = _SOURCE_LABEL.get(src, src)
+                st.markdown(
+                    f"- **{label}**: {counts['total']} total "
+                    f"({counts['processed']} ok / {counts['failed']} erro)"
+                )
+        else:
+            st.info("Nenhum dado ainda.")
+
+    # ── Aba: Teste Meta ───────────────────────────────────────────────────────
+    with tab_teste:
+        st.markdown(
+            "Simula um webhook **Meta Lead Ads** para testar a integração "
+            "sem precisar de uma campanha real."
+        )
+        with st.form("form_meta_test", clear_on_submit=True):
+            mt1, mt2 = st.columns(2)
+            with mt1:
+                mt_name      = st.text_input("Nome *")
+                mt_email     = st.text_input("Email *")
+                mt_phone     = st.text_input("Telefone")
+            with mt2:
+                mt_campaign  = st.text_input("Campanha", value="Teste Campanha")
+                mt_adset     = st.text_input("Adset",    value="Teste Adset")
+                mt_ad        = st.text_input("Anúncio",  value="Teste Ad")
+            mt_budget    = st.number_input("Budget (opcional)", min_value=0.0, step=500.0, format="%.2f")
+            mt_submit    = st.form_submit_button("▶ Disparar Teste", use_container_width=True, type="primary")
+
+        if mt_submit:
+            if not mt_name or not mt_email:
+                st.error("Nome e email são obrigatórios.")
+            else:
+                ws_slug = workspace.get("slug", "")
+                body = {
+                    "workspace_slug": ws_slug,
+                    "name":           mt_name,
+                    "email":          mt_email,
+                    "phone":          mt_phone or None,
+                    "campaign_name":  mt_campaign or None,
+                    "adset_name":     mt_adset   or None,
+                    "ad_name":        mt_ad      or None,
+                    "budget":         mt_budget  or None,
+                    "utm_medium":     "paid",
+                }
+                try:
+                    result = post_meta_test(body, token)
+                    acao   = result.get("acao", "?")
+                    tags   = result.get("tags", [])
+                    lead_r = result.get("lead", {})
+                    st.success(
+                        f"Lead **{lead_r.get('name')}** {acao}! "
+                        f"Tags: {', '.join(tags) if tags else '—'} · "
+                        f"Event #{result.get('event_id')}"
+                    )
+                    with st.expander("Ver envelope Meta enviado"):
+                        st.json(result.get("envelope", {}))
+                except Exception as e:
+                    st.error(f"Erro: {e}")

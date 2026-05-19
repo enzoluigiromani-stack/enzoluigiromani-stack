@@ -16,6 +16,7 @@ from app.services.activity_service import log_activity
 from app.services.capture_parser import ParseError, parse
 from app.services.notifications import notify_new_lead
 from app.services.permissions import require_manager
+from app.services.tag_service import compute_tags
 from app.models.user import User
 from app.services.workspace import require_workspace
 
@@ -78,34 +79,41 @@ def webhook_lead(
         # 3. Garantir workspace_id no upsert
         fields["workspace_id"] = workspace.id
 
-        # 4. Upsert do lead (anti-duplicação por email+workspace)
+        # 4. Tags automáticas
+        tags = compute_tags(fields)
+        if tags:
+            fields["tags"] = tags
+
+        # 5. Upsert do lead (anti-duplicação por email+workspace)
         lead, criado = _upsert_lead(db, fields["email"], workspace.id, fields)
 
-        # 5. Vincular evento ao lead
+        # 6. Vincular evento ao lead
         event.lead_id   = lead.id
         event.processed = True
         db.commit()
 
-        # 6. Log de atividade
+        # 7. Log de atividade com tipos específicos de webhook
+        activity_type = "lead_captured" if criado else "lead_updated_from_webhook"
         log_activity(
             db,
             workspace_id=workspace.id,
-            type="lead_created" if criado else "lead_updated",
-            description=f"Lead {'capturado' if criado else 'atualizado'} via webhook ({source}): {lead.name}",
+            type=activity_type,
+            description=f"Lead {'capturado' if criado else 'atualizado'} via {source}: {lead.name}",
             lead_id=lead.id,
-            meta={"source": source, "event_id": event.id},
+            meta={"source": source, "event_id": event.id, "tags": tags},
         )
 
-        # 7. Notificação em background (só para leads novos)
+        # 8. Notificação em background (só para leads novos)
         if criado:
             background_tasks.add_task(notify_new_lead, lead)
 
         return {
-            "status": "ok",
-            "acao": "criado" if criado else "atualizado",
-            "source": source,
+            "status":   "ok",
+            "acao":     "criado" if criado else "atualizado",
+            "source":   source,
+            "tags":     tags,
             "event_id": event.id,
-            "lead": jsonable_encoder(LeadResponse.model_validate(lead)),
+            "lead":     jsonable_encoder(LeadResponse.model_validate(lead)),
         }
 
     except ParseError as exc:

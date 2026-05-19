@@ -155,6 +155,39 @@ def move_lead(lead_id: int, stage_id: int, token: str) -> dict:
     return res.json()
 
 
+# ── Lead Capture ─────────────────────────────────────────────────────────────
+
+def get_capture_events(token: str, page: int = 1, limit: int = 50,
+                       source: str = None, processed: bool = None) -> dict:
+    params = {"page": page, "limit": limit}
+    if source:     params["source"] = source
+    if processed is not None: params["processed"] = str(processed).lower()
+    try:
+        res = requests.get(f"{API_URL}/lead-capture/events",
+                           params=params, headers=_headers(token), timeout=5)
+        res.raise_for_status()
+        return res.json()
+    except Exception:
+        return {"items": [], "total": 0}
+
+
+def get_capture_stats(token: str) -> dict:
+    try:
+        res = requests.get(f"{API_URL}/lead-capture/stats",
+                           headers=_headers(token), timeout=5)
+        res.raise_for_status()
+        return res.json()
+    except Exception:
+        return {"total": 0, "processed": 0, "failed": 0, "by_source": {}}
+
+
+def post_meta_test(body: dict, token: str) -> dict:
+    res = requests.post(f"{API_URL}/lead-capture/meta/test",
+                        json=body, headers=_headers(token), timeout=10)
+    res.raise_for_status()
+    return res.json()
+
+
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 
 def get_board(token: str) -> list:

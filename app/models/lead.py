@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Float, ForeignKey, Integer, String, DateTime, UniqueConstraint
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, DateTime, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database.database import Base
 
@@ -35,6 +35,9 @@ class Lead(Base):
     adset_name         = Column(String, nullable=True)
     ad_name            = Column(String, nullable=True)
     external_source_id = Column(String, nullable=True, index=True)
+
+    # Tags automáticas (lista JSON: ['facebook', 'high_ticket', ...])
+    tags = Column(JSON, nullable=True)
 
     stage     = relationship("PipelineStage", back_populates="leads")
     owner     = relationship("User")
