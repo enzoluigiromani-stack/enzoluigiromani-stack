@@ -15,4 +15,5 @@ class Workspace(Base):
     users    = relationship("User", back_populates="workspace")
     leads    = relationship("Lead", back_populates="workspace")
     stages   = relationship("PipelineStage", back_populates="workspace")
-    settings = relationship("WorkspaceSettings", back_populates="workspace", uselist=False)
+    settings     = relationship("WorkspaceSettings", back_populates="workspace", uselist=False)
+    integrations = relationship("WorkspaceIntegrations", back_populates="workspace", uselist=False)

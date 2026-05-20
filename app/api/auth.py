@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.models.user import User
-from app.schemas.user import Token, UserCreate, UserLogin, UserResponse
+from app.schemas.user import Token, UserCreate, UserLogin, UserResponse, ProfileUpdate
 from app.services.activity_service import log_activity
 from app.services.auth import create_access_token, get_current_user, hash_password, verify_password
 from app.services.workspace import create_workspace
@@ -52,4 +52,29 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserResponse)
 def me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@router.patch("/profile", response_model=UserResponse)
+def update_profile(
+    data: ProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if data.name is not None:
+        if not data.name.strip():
+            raise HTTPException(status_code=400, detail="Nome não pode ser vazio")
+        current_user.name = data.name.strip()
+
+    if data.new_password is not None:
+        if not data.current_password:
+            raise HTTPException(status_code=400, detail="Senha atual é obrigatória")
+        if not verify_password(data.current_password, current_user.hashed_password):
+            raise HTTPException(status_code=400, detail="Senha atual incorreta")
+        if len(data.new_password) < 6:
+            raise HTTPException(status_code=400, detail="Nova senha deve ter pelo menos 6 caracteres")
+        current_user.hashed_password = hash_password(data.new_password)
+
+    db.commit()
+    db.refresh(current_user)
     return current_user

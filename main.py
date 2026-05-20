@@ -17,6 +17,7 @@ from app.models import task               # noqa: F401
 from app.models import lead_capture_event  # noqa: F401
 from app.models import conversation        # noqa: F401
 from app.models import message             # noqa: F401
+from app.models import workspace_integrations  # noqa: F401
 from app.api import leads, webhook, pipeline, auth, workspace as workspace_router
 from app.api import activities, tasks, lead_capture, inbox
 
@@ -43,6 +44,7 @@ def _migrate_columns():
             ("name",         "VARCHAR"),
             ("is_admin",     "BOOLEAN DEFAULT 0"),
             ("role",         "VARCHAR DEFAULT 'admin'"),
+            ("is_active",    "BOOLEAN DEFAULT 1"),
         ]:
             if col not in user_cols:
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {ddl}"))
