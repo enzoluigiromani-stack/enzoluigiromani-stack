@@ -19,6 +19,7 @@ from app.services.permissions import require_manager
 from app.services.tag_service import compute_tags
 from app.models.user import User
 from app.services.workspace import require_workspace
+from app.services import realtime
 
 logger = logging.getLogger(__name__)
 
@@ -103,9 +104,13 @@ def webhook_lead(
             meta={"source": source, "event_id": event.id, "tags": tags},
         )
 
-        # 8. Notificação em background (só para leads novos)
+        # 8. Notificação + realtime em background
+        lead_dict = jsonable_encoder(LeadResponse.model_validate(lead))
         if criado:
             background_tasks.add_task(notify_new_lead, lead)
+            background_tasks.add_task(realtime.broadcast_lead_created, workspace.id, lead_dict)
+        else:
+            background_tasks.add_task(realtime.broadcast_lead_updated, workspace.id, lead_dict)
 
         return {
             "status":   "ok",

@@ -122,6 +122,7 @@ def get_lead(
 def update_lead(
     lead_id: int,
     data: LeadUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_sales),
     workspace: Workspace = Depends(require_workspace),
@@ -149,6 +150,8 @@ def update_lead(
         lead_id=lead.id,
         meta={"changed_fields": changed},
     )
+    lead_dict = jsonable_encoder(LeadResponse.model_validate(lead))
+    background_tasks.add_task(realtime.broadcast_lead_updated, workspace.id, lead_dict)
     return lead
 
 
@@ -220,6 +223,7 @@ def move_lead(
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_lead(
     lead_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_manager),
     workspace: Workspace = Depends(require_workspace),
@@ -229,3 +233,4 @@ def delete_lead(
         raise HTTPException(status_code=404, detail="Lead não encontrado")
     db.delete(lead)
     db.commit()
+    background_tasks.add_task(realtime.broadcast_lead_deleted, workspace.id, lead_id)

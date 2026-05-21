@@ -31,6 +31,7 @@ from app.services.platform_adapters.meta import MetaLeadAdsAdapter
 from app.services.tag_service import compute_tags, merge_tags
 from app.services.workspace import require_workspace
 from app.api.leads import _upsert_lead
+from app.services import realtime
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/lead-capture", tags=["lead-capture"])
@@ -232,8 +233,12 @@ def meta_test(
             meta={"source": source, "event_id": event.id, "test": True, "tags": tags},
         )
 
+        lead_dict = jsonable_encoder(LeadResponse.model_validate(lead))
         if criado:
             background_tasks.add_task(notify_new_lead, lead)
+            background_tasks.add_task(realtime.broadcast_lead_created, workspace.id, lead_dict)
+        else:
+            background_tasks.add_task(realtime.broadcast_lead_updated, workspace.id, lead_dict)
 
         return {
             "status":   "ok",

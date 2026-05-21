@@ -33,6 +33,10 @@ def lead_updated_event(lead: dict) -> dict:
     return make_event(PIPELINE_UPDATES, "lead.updated", lead)
 
 
+def lead_deleted_event(lead_id: int) -> dict:
+    return make_event(PIPELINE_UPDATES, "lead.deleted", {"id": lead_id})
+
+
 # Task channel events
 def task_created_event(task: dict) -> dict:
     return make_event(TASK_UPDATES, "task.created", task)

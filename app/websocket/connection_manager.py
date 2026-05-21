@@ -7,6 +7,17 @@ from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
 
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def set_main_loop(loop: asyncio.AbstractEventLoop) -> None:
+    global _main_loop
+    _main_loop = loop
+
+
+def get_main_loop() -> asyncio.AbstractEventLoop | None:
+    return _main_loop
+
 
 class ConnectionManager:
     """

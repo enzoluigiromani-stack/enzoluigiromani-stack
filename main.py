@@ -23,6 +23,7 @@ from app.models import notification            # noqa: F401
 from app.api import leads, webhook, pipeline, auth, workspace as workspace_router
 from app.api import activities, tasks, lead_capture, inbox, analytics, notifications
 from app.websocket.router import router as ws_router
+from app.websocket.connection_manager import set_main_loop
 
 
 def _sqlite_migrations():
@@ -86,6 +87,12 @@ app = FastAPI(
     description="API de gerenciamento de leads multi-tenant com RBAC e inbox omnichannel",
     version="5.0.0",
 )
+
+
+@app.on_event("startup")
+async def _capture_event_loop():
+    import asyncio
+    set_main_loop(asyncio.get_running_loop())
 
 import os as _os
 _frontend_url = _os.getenv("FRONTEND_URL", "")

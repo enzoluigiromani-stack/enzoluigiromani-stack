@@ -79,6 +79,17 @@ export function RealtimeSync() {
           });
           scheduleAnalyticsInvalidation();
         }
+
+        if (event.event === "lead.deleted") {
+          const { id } = event.payload as { id: number };
+          queryClient.setQueryData<KanbanColumn[]>(BOARD_QUERY_KEY, (old = []) =>
+            old.map((col) => ({ ...col, leads: col.leads.filter((l) => l.id !== id) })),
+          );
+          queryClient.setQueryData<Lead[]>(["leads"], (old) =>
+            old ? old.filter((l) => l.id !== id) : old,
+          );
+          scheduleAnalyticsInvalidation();
+        }
       }
 
       // ── Tasks → matching filter caches + summary ───────────────────────────

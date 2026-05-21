@@ -5,21 +5,23 @@ These are called from BackgroundTasks in API routes so they don't block the resp
 import asyncio
 import logging
 
-from app.websocket.connection_manager import manager
+from app.websocket.connection_manager import manager, get_main_loop
 from app.websocket import channels
 
 logger = logging.getLogger(__name__)
 
 
 def _run(coro):
-    """Execute a coroutine from a sync context (BackgroundTasks)."""
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.ensure_future(coro)
-        else:
-            loop.run_until_complete(coro)
-    except Exception:
+    """
+    Schedule a coroutine onto the main event loop from any thread context.
+    BackgroundTasks for sync routes run in a thread pool, so we must use
+    run_coroutine_threadsafe instead of ensure_future (which is not thread-safe).
+    """
+    loop = get_main_loop()
+    if loop and loop.is_running():
+        asyncio.run_coroutine_threadsafe(coro, loop)
+    else:
+        # Fallback: direct async run (e.g. tests or CLI usage)
         asyncio.run(coro)
 
 
@@ -36,6 +38,10 @@ def broadcast_lead_moved(workspace_id: int, lead_id: int, from_stage: str, to_st
 
 def broadcast_lead_updated(workspace_id: int, lead: dict):
     _run(manager.broadcast_workspace(workspace_id, channels.lead_updated_event(lead)))
+
+
+def broadcast_lead_deleted(workspace_id: int, lead_id: int):
+    _run(manager.broadcast_workspace(workspace_id, channels.lead_deleted_event(lead_id)))
 
 
 def broadcast_task_created(workspace_id: int, task: dict):

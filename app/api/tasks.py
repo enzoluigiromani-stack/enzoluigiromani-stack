@@ -178,6 +178,7 @@ def _check_task_permission(task, current_user):
 @router.patch("/{task_id}/complete", response_model=TaskResponse)
 def complete_task(
     task_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_sales),
     workspace: Workspace = Depends(require_workspace),
@@ -196,6 +197,7 @@ def complete_task(
         user_id=current_user.id, lead_id=task.lead_id,
         meta={"task_id": task.id},
     )
+    background_tasks.add_task(realtime.broadcast_task_updated, workspace.id, serialize_task(task).model_dump(mode="json"))
     return serialize_task(task)
 
 
@@ -203,6 +205,7 @@ def complete_task(
 def update_task_status(
     task_id: int,
     data: TaskUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_sales),
     workspace: Workspace = Depends(require_workspace),
@@ -217,6 +220,7 @@ def update_task_status(
             task.completed_at = datetime.utcnow()
     db.commit()
     db.refresh(task)
+    background_tasks.add_task(realtime.broadcast_task_updated, workspace.id, serialize_task(task).model_dump(mode="json"))
     return serialize_task(task)
 
 
