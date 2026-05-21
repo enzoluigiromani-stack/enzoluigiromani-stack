@@ -5,13 +5,11 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { useAuthStore } from "@/store/auth.store";
-import { useUIStore } from "@/store/ui.store";
 import { authService } from "@/services/auth.service";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { token, user, setUser, logout, _hasHydrated } = useAuthStore();
-  const { darkMode } = useUIStore();
 
   useEffect(() => {
     if (!_hasHydrated) return;
@@ -26,14 +24,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       });
     }
   }, [token, user, router, setUser, logout, _hasHydrated]);
-
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, [darkMode]);
 
   if (!_hasHydrated) return null;
   if (!token) return null;

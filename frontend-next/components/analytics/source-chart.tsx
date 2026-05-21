@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { BySourceResponse } from "@/types/analytics";
+import { useTheme } from "@/hooks/use-theme";
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#64748b"];
 
@@ -19,6 +20,8 @@ interface SourceChartProps {
 }
 
 export function SourceChart({ data, loading }: SourceChartProps) {
+  const { chartColors } = useTheme();
+
   if (loading) {
     return (
       <Card>
@@ -79,9 +82,15 @@ export function SourceChart({ data, loading }: SourceChartProps) {
             </Pie>
             <Tooltip
               formatter={(val) => [`${val} leads`]}
-              contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", fontSize: 12 }}
+              contentStyle={{
+                borderRadius: 8,
+                border: `1px solid ${chartColors.border}`,
+                backgroundColor: chartColors.tooltip,
+                color: chartColors.text,
+                fontSize: 12,
+              }}
             />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Legend wrapperStyle={{ fontSize: 12, color: chartColors.tick }} />
           </PieChart>
         </ResponsiveContainer>
       </CardContent>

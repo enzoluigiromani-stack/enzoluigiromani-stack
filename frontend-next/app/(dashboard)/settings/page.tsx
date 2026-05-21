@@ -1,17 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Settings2, Kanban, Users, Plug, ShieldCheck, User, Lock } from "lucide-react";
+import { Settings2, Kanban, Users, Plug, ShieldCheck, User, Lock, Palette } from "lucide-react";
 import { GeneralSection } from "@/components/settings/general-section";
 import { PipelineSection } from "@/components/settings/pipeline-section";
 import { TeamSection } from "@/components/settings/team-section";
 import { SecuritySection } from "@/components/settings/security-section";
 import { IntegrationsSection } from "@/components/settings/integrations-section";
 import { AccountSection } from "@/components/settings/account-section";
+import { AppearanceSection } from "@/components/settings/appearance-section";
 import { useAuthStore } from "@/store/auth.store";
 import { cn } from "@/lib/utils";
 
-type Tab = "geral" | "pipeline" | "equipe" | "integracoes" | "seguranca" | "conta";
+type Tab = "geral" | "pipeline" | "equipe" | "integracoes" | "seguranca" | "aparencia" | "conta";
 
 const TABS: {
   id: Tab;
@@ -19,11 +20,12 @@ const TABS: {
   icon: React.ElementType;
   adminOnly?: boolean;
 }[] = [
-  { id: "geral",       label: "Geral",        icon: Settings2,   adminOnly: true },
-  { id: "pipeline",    label: "Pipeline",     icon: Kanban,      adminOnly: true },
-  { id: "equipe",      label: "Equipe",       icon: Users,       adminOnly: true },
-  { id: "integracoes", label: "Integrações",  icon: Plug,        adminOnly: true },
+  { id: "geral",       label: "Geral",        icon: Settings2, adminOnly: true },
+  { id: "pipeline",    label: "Pipeline",     icon: Kanban,    adminOnly: true },
+  { id: "equipe",      label: "Equipe",       icon: Users,     adminOnly: true },
+  { id: "integracoes", label: "Integrações",  icon: Plug,      adminOnly: true },
   { id: "seguranca",   label: "Segurança",    icon: ShieldCheck },
+  { id: "aparencia",   label: "Aparência",    icon: Palette },
   { id: "conta",       label: "Minha conta",  icon: User },
 ];
 
@@ -35,7 +37,6 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in max-w-4xl">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
         <p className="text-muted-foreground">Gerencie o workspace e suas preferências</p>
@@ -70,14 +71,15 @@ export default function SettingsPage() {
           })}
         </nav>
 
-        {/* Conteúdo da tab */}
+        {/* Conteúdo */}
         <div className="flex-1 min-w-0">
-          {activeTab === "geral" && (isAdmin ? <GeneralSection /> : <AdminOnlyMessage />)}
-          {activeTab === "pipeline" && (isAdmin ? <PipelineSection /> : <AdminOnlyMessage />)}
-          {activeTab === "equipe" && (isAdmin ? <TeamSection /> : <AdminOnlyMessage />)}
+          {activeTab === "geral"       && (isAdmin ? <GeneralSection />       : <AdminOnlyMessage />)}
+          {activeTab === "pipeline"    && (isAdmin ? <PipelineSection />    : <AdminOnlyMessage />)}
+          {activeTab === "equipe"      && (isAdmin ? <TeamSection />         : <AdminOnlyMessage />)}
           {activeTab === "integracoes" && (isAdmin ? <IntegrationsSection /> : <AdminOnlyMessage />)}
-          {activeTab === "seguranca" && <SecuritySection />}
-          {activeTab === "conta" && <AccountSection />}
+          {activeTab === "seguranca"   && <SecuritySection />}
+          {activeTab === "aparencia"   && <AppearanceSection />}
+          {activeTab === "conta"       && <AccountSection />}
         </div>
       </div>
     </div>

@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { TimelineResponse } from "@/types/analytics";
+import { useTheme } from "@/hooks/use-theme";
 
 interface TimelineChartProps {
   data?: TimelineResponse;
@@ -24,8 +25,8 @@ function formatLabel(period: string, granularity: string): string {
     return `${d}/${m}`;
   }
   if (granularity === "week") {
-    const [y, w] = period.split("-W").length === 2 ? period.split("-W") : period.split("-");
-    return `S${w}/${y?.slice(2)}`;
+    const parts = period.includes("-W") ? period.split("-W") : period.split("-");
+    return `S${parts[1]}/${parts[0]?.slice(2)}`;
   }
   const [y, m] = period.split("-");
   const months = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -33,6 +34,8 @@ function formatLabel(period: string, granularity: string): string {
 }
 
 export function TimelineChart({ data, loading }: TimelineChartProps) {
+  const { chartColors } = useTheme();
+
   if (loading) {
     return (
       <Card>
@@ -70,29 +73,21 @@ export function TimelineChart({ data, loading }: TimelineChartProps) {
                 <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis dataKey="period" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
+            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+            <XAxis dataKey="period" tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} axisLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} tickLine={false} axisLine={false} width={36} />
             <Tooltip
-              contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", fontSize: 12 }}
+              contentStyle={{
+                borderRadius: 8,
+                border: `1px solid ${chartColors.border}`,
+                backgroundColor: chartColors.tooltip,
+                color: chartColors.text,
+                fontSize: 12,
+              }}
             />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Area
-              type="monotone"
-              dataKey="Novos leads"
-              stroke="#6366f1"
-              fill="url(#colorNew)"
-              strokeWidth={2}
-              dot={false}
-            />
-            <Area
-              type="monotone"
-              dataKey="Convertidos"
-              stroke="#10b981"
-              fill="url(#colorConv)"
-              strokeWidth={2}
-              dot={false}
-            />
+            <Legend wrapperStyle={{ fontSize: 12, color: chartColors.tick }} />
+            <Area type="monotone" dataKey="Novos leads" stroke="#6366f1" fill="url(#colorNew)" strokeWidth={2} dot={false} />
+            <Area type="monotone" dataKey="Convertidos"  stroke="#10b981" fill="url(#colorConv)" strokeWidth={2} dot={false} />
           </AreaChart>
         </ResponsiveContainer>
       </CardContent>
