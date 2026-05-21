@@ -7,15 +7,24 @@ export type WSEvent = {
   payload: unknown;
 };
 
+export type ConnectionStatus = "connecting" | "connected" | "disconnected";
+
 type Handler = (event: WSEvent) => void;
+type StatusHandler = (status: ConnectionStatus) => void;
 
 class RealtimeClient {
   private ws: WebSocket | null = null;
   private handlers: Handler[] = [];
+  private statusHandlers: StatusHandler[] = [];
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private workspaceId: number | null = null;
   private token: string | null = null;
   private stopped = false;
+  private _status: ConnectionStatus = "disconnected";
+
+  get status(): ConnectionStatus {
+    return this._status;
+  }
 
   connect(workspaceId: number, token: string) {
     this.workspaceId = workspaceId;
@@ -32,6 +41,7 @@ class RealtimeClient {
       this.ws.close();
       this.ws = null;
     }
+    this._setStatus("disconnected");
   }
 
   on(handler: Handler) {
@@ -41,10 +51,27 @@ class RealtimeClient {
     };
   }
 
+  onStatus(handler: StatusHandler) {
+    this.statusHandlers.push(handler);
+    return () => {
+      this.statusHandlers = this.statusHandlers.filter((h) => h !== handler);
+    };
+  }
+
+  private _setStatus(s: ConnectionStatus) {
+    this._status = s;
+    this.statusHandlers.forEach((h) => h(s));
+  }
+
   private _open() {
     if (!this.workspaceId || !this.token) return;
+    this._setStatus("connecting");
     const url = `${BASE_URL}/ws/${this.workspaceId}?token=${this.token}`;
     this.ws = new WebSocket(url);
+
+    this.ws.onopen = () => {
+      this._setStatus("connected");
+    };
 
     this.ws.onmessage = (e) => {
       try {
@@ -56,6 +83,7 @@ class RealtimeClient {
     };
 
     this.ws.onclose = () => {
+      this._setStatus("disconnected");
       if (!this.stopped) {
         this.reconnectTimer = setTimeout(() => this._open(), 3000);
       }

@@ -1,13 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuthStore } from "@/store/auth.store";
-import { realtimeClient, WSEvent } from "@/services/websocket.service";
+import { realtimeClient, WSEvent, ConnectionStatus } from "@/services/websocket.service";
 
-/**
- * Connects to the backend WebSocket for the current user's workspace.
- * Returns a function to register an event handler.
- */
 export function useRealtime(
   handler?: (event: WSEvent) => void,
   deps: unknown[] = [],
@@ -21,10 +17,6 @@ export function useRealtime(
       realtimeClient.connect(user.workspace_id, token);
       connected.current = true;
     }
-    return () => {
-      // Keep connection alive while any component is mounted.
-      // Disconnect only happens on logout (handled in auth store).
-    };
   }, [token, user?.workspace_id]);
 
   useEffect(() => {
@@ -33,4 +25,16 @@ export function useRealtime(
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handler, ...deps]);
+}
+
+export function useRealtimeStatus(): ConnectionStatus {
+  const [status, setStatus] = useState<ConnectionStatus>(realtimeClient.status);
+
+  useEffect(() => {
+    setStatus(realtimeClient.status);
+    const off = realtimeClient.onStatus(setStatus);
+    return off;
+  }, []);
+
+  return status;
 }

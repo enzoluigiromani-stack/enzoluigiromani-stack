@@ -12,18 +12,57 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertCircle, RefreshCw, Inbox } from "lucide-react";
+import { AlertCircle, RefreshCw, Inbox, Wifi, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PipelineColumn } from "./pipeline-column";
 import { PipelineHeader } from "./pipeline-header";
 import { PipelineSkeleton } from "./pipeline-skeleton";
 import { PipelineCardDisplay } from "./pipeline-card";
 import { usePipeline } from "@/hooks/use-pipeline";
+import { useRealtimeStatus } from "@/hooks/use-realtime";
+import { cn } from "@/lib/utils";
 import type { Lead } from "@/types";
 
 interface ActiveCard {
   lead: Lead;
   stageColor?: string;
+}
+
+function LiveIndicator() {
+  const status = useRealtimeStatus();
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-all duration-500",
+        status === "connected"
+          ? "text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20"
+          : status === "connecting"
+          ? "text-amber-500 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20"
+          : "text-muted-foreground border-border bg-muted/40",
+      )}
+    >
+      {status === "connected" ? (
+        <>
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+          </span>
+          Ao vivo
+        </>
+      ) : status === "connecting" ? (
+        <>
+          <RefreshCw className="h-3 w-3 animate-spin" />
+          Conectando…
+        </>
+      ) : (
+        <>
+          <WifiOff className="h-3 w-3" />
+          Offline
+        </>
+      )}
+    </div>
+  );
 }
 
 export function PipelineBoard() {
@@ -37,17 +76,14 @@ export function PipelineBoard() {
     totalLeads,
     totalValue,
     wonLeads,
+    flashIds,
   } = usePipeline();
 
   const [activeCard, setActiveCard] = useState<ActiveCard | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 8 },
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -59,13 +95,10 @@ export function PipelineBoard() {
     (event: DragEndEvent) => {
       const { active, over } = event;
       setActiveCard(null);
-
       if (!over) return;
 
-      // IDs prefixados: "card-{leadId}" e "col-{stageId}"
       const leadId = Number((active.id as string).replace("card-", ""));
       const targetStageId = Number((over.id as string).replace("col-", ""));
-
       if (isNaN(leadId) || isNaN(targetStageId)) return;
 
       const currentStageId = columns
@@ -76,12 +109,10 @@ export function PipelineBoard() {
         moveLead({ leadId, stageId: targetStageId });
       }
     },
-    [columns, moveLead]
+    [columns, moveLead],
   );
 
-  const handleDragCancel = useCallback(() => {
-    setActiveCard(null);
-  }, []);
+  const handleDragCancel = useCallback(() => setActiveCard(null), []);
 
   if (isLoading) return <PipelineSkeleton />;
 
@@ -116,12 +147,17 @@ export function PipelineBoard() {
       onDragCancel={handleDragCancel}
     >
       <div className="space-y-5">
-        <PipelineHeader
-          totalLeads={totalLeads}
-          totalValue={totalValue}
-          stageCount={columns.length}
-          wonLeads={wonLeads}
-        />
+        <div className="space-y-2">
+          <div className="flex justify-end">
+            <LiveIndicator />
+          </div>
+          <PipelineHeader
+            totalLeads={totalLeads}
+            totalValue={totalValue}
+            stageCount={columns.length}
+            wonLeads={wonLeads}
+          />
+        </div>
 
         {/* Indicador de movimentação */}
         <AnimatePresence>
@@ -145,6 +181,7 @@ export function PipelineBoard() {
               key={column.stage.id}
               column={column}
               isAnyDragging={!!activeCard}
+              flashIds={flashIds}
             />
           ))}
         </div>

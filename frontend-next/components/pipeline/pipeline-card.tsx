@@ -133,9 +133,10 @@ export function PipelineCardDisplay({ lead, stageColor, isOverlay = false }: Pip
 export interface PipelineCardProps {
   lead: Lead;
   stageColor?: string;
+  isFlashing?: boolean;
 }
 
-export function PipelineCard({ lead, stageColor }: PipelineCardProps) {
+export function PipelineCard({ lead, stageColor, isFlashing = false }: PipelineCardProps) {
   const router = useRouter();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `card-${lead.id}`,
@@ -150,7 +151,11 @@ export function PipelineCard({ lead, stageColor }: PipelineCardProps) {
       exit={{ opacity: 0, y: -4, scale: 0.97 }}
       transition={{ duration: 0.14, ease: "easeOut" }}
       layout
-      className={cn("group cursor-pointer", isDragging && "pointer-events-none")}
+      className={cn(
+        "group cursor-pointer rounded-xl transition-shadow duration-500",
+        isDragging && "pointer-events-none",
+        isFlashing && "ring-2 ring-primary/40 shadow-[0_0_12px_2px] shadow-primary/20",
+      )}
       onClick={() => router.push(`/leads/${lead.id}`)}
       {...attributes}
       {...listeners}

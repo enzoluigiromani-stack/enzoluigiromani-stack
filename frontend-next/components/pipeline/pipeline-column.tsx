@@ -11,9 +11,10 @@ import type { KanbanColumn } from "@/types";
 interface PipelineColumnProps {
   column: KanbanColumn;
   isAnyDragging: boolean;
+  flashIds?: Set<number>;
 }
 
-export function PipelineColumn({ column, isAnyDragging }: PipelineColumnProps) {
+export function PipelineColumn({ column, isAnyDragging, flashIds }: PipelineColumnProps) {
   const { stage, leads } = column;
   const { setNodeRef, isOver } = useDroppable({ id: `col-${stage.id}` });
 
@@ -71,7 +72,12 @@ export function PipelineColumn({ column, isAnyDragging }: PipelineColumnProps) {
       >
         <AnimatePresence mode="popLayout">
           {leads.map((lead) => (
-            <PipelineCard key={lead.id} lead={lead} stageColor={stage.color} />
+            <PipelineCard
+              key={lead.id}
+              lead={lead}
+              stageColor={stage.color}
+              isFlashing={flashIds?.has(lead.id) ?? false}
+            />
           ))}
         </AnimatePresence>
 
