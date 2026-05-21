@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,6 +13,8 @@ import {
   Tag,
   MessageSquare,
   CheckSquare,
+  RefreshCw,
+  WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +22,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { leadsService } from "@/services/leads.service";
+import { tasksService } from "@/services/tasks.service";
+import { realtimeClient } from "@/services/websocket.service";
+import { useRealtimeStatus } from "@/hooks/use-realtime";
 import { api } from "@/services/api";
 import type { Lead, Activity, Task } from "@/types";
+import { cn } from "@/lib/utils";
+
+// ── Config ────────────────────────────────────────────────────────────────────
 
 const ACTIVITY_ICONS: Record<string, string> = {
   note: "📝",
@@ -34,6 +42,20 @@ const ACTIVITY_ICONS: Record<string, string> = {
   capture: "📥",
   default: "💬",
 };
+
+const PRIORITY_COLORS: Record<string, string> = {
+  high: "text-destructive",
+  medium: "text-yellow-600",
+  low: "text-muted-foreground",
+};
+
+const TASK_STATUS: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
+  pending: { label: "Pendente", variant: "outline" },
+  overdue: { label: "Atrasada", variant: "destructive" },
+  completed: { label: "Concluída", variant: "secondary" },
+};
+
+// ── Sub-components ────────────────────────────────────────────────────────────
 
 function ActivityItem({ activity }: { activity: Activity }) {
   const icon = ACTIVITY_ICONS[activity.type] ?? ACTIVITY_ICONS.default;
@@ -52,21 +74,39 @@ function ActivityItem({ activity }: { activity: Activity }) {
   );
 }
 
-const PRIORITY_COLORS: Record<string, string> = {
-  high: "text-destructive",
-  medium: "text-yellow-600",
-  low: "text-muted-foreground",
-};
+function LiveBadge() {
+  const status = useRealtimeStatus();
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-all",
+      status === "connected"
+        ? "text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20"
+        : status === "connecting"
+        ? "text-amber-500 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20"
+        : "text-muted-foreground border-border bg-muted/40",
+    )}>
+      {status === "connected" ? (
+        <>
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+          </span>
+          Ao vivo
+        </>
+      ) : status === "connecting" ? (
+        <><RefreshCw className="h-3 w-3 animate-spin" /> Conectando…</>
+      ) : (
+        <><WifiOff className="h-3 w-3" /> Offline</>
+      )}
+    </span>
+  );
+}
 
-const STATUS_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
-  pending: { label: "Pendente", variant: "outline" },
-  in_progress: { label: "Em andamento", variant: "default" },
-  completed: { label: "Concluída", variant: "secondary" },
-  cancelled: { label: "Cancelada", variant: "destructive" },
-};
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const leadId = Number(id);
   const router = useRouter();
   const queryClient = useQueryClient();
   const [noteText, setNoteText] = useState("");
@@ -77,27 +117,50 @@ export default function LeadDetailPage() {
       const { data } = await api.get<Lead>(`/leads/${id}`);
       return data;
     },
+    enabled: !!id,
   });
 
   const { data: timelineData } = useQuery({
     queryKey: ["lead-timeline", id],
-    queryFn: () => leadsService.getTimeline(Number(id)),
+    queryFn: () => leadsService.getTimeline(leadId),
     enabled: !!id,
   });
 
   const { data: tasks = [] } = useQuery<Task[]>({
     queryKey: ["lead-tasks", id],
-    queryFn: async () => {
-      const { data } = await api.get<Task[]>(`/leads/${id}/tasks`);
-      return data;
-    },
+    queryFn: () => tasksService.getTasks(undefined, leadId),
     enabled: !!id,
   });
+
+  // Live updates for this specific lead
+  useEffect(() => {
+    const off = realtimeClient.on((event) => {
+      if (event.channel !== "pipeline_updates") return;
+
+      if (event.event === "lead.updated") {
+        const updated = event.payload as Lead;
+        if (updated.id !== leadId) return;
+        queryClient.setQueryData<Lead>(["lead", id], (old) =>
+          old ? { ...old, ...updated } : updated,
+        );
+      }
+
+      if (event.event === "lead.moved") {
+        const { lead_id, lead } = event.payload as { lead_id: number; lead: Lead };
+        if (lead_id !== leadId) return;
+        queryClient.setQueryData<Lead>(["lead", id], (old) =>
+          old ? { ...old, stage_id: lead.stage_id, stage: lead.stage } : old,
+        );
+        queryClient.invalidateQueries({ queryKey: ["lead-timeline", id] });
+      }
+    });
+    return off;
+  }, [id, leadId, queryClient]);
 
   const noteMutation = useMutation({
     mutationFn: async (description: string) => {
       await api.post("/activities/", {
-        lead_id: Number(id),
+        lead_id: leadId,
         type: "note",
         description,
       });
@@ -138,13 +201,14 @@ export default function LeadDetailPage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold tracking-tight">{lead.name}</h1>
             {lead.status && (
               <Badge variant={lead.status === "active" ? "default" : "secondary"}>
                 {lead.status === "active" ? "Ativo" : lead.status}
               </Badge>
             )}
+            <LiveBadge />
           </div>
           {lead.stage && (
             <div className="flex items-center gap-1.5 mt-1">
@@ -267,7 +331,7 @@ export default function LeadDetailPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {tasks.map((task) => {
-                  const status = STATUS_BADGE[task.status] ?? { label: task.status, variant: "outline" as const };
+                  const status = TASK_STATUS[task.status] ?? { label: task.status, variant: "outline" as const };
                   return (
                     <div key={task.id} className="flex items-start gap-2 text-sm">
                       <div className={`mt-0.5 font-medium ${PRIORITY_COLORS[task.priority]}`}>•</div>

@@ -31,7 +31,12 @@ export function RealtimeSync() {
                 : col,
             );
           });
-          queryClient.invalidateQueries({ queryKey: ["leads"] });
+          // Insert into flat leads list without a full refetch
+          queryClient.setQueryData<Lead[]>(["leads"], (old) => {
+            if (!old) return old;
+            if (old.some((l) => l.id === lead.id)) return old;
+            return [lead, ...old];
+          });
         }
 
         if (event.event === "lead.moved") {
@@ -59,7 +64,11 @@ export function RealtimeSync() {
               leads: col.leads.map((l) => (l.id === lead.id ? { ...l, ...lead } : l)),
             })),
           );
-          queryClient.invalidateQueries({ queryKey: ["leads"] });
+          // Update flat leads list in place
+          queryClient.setQueryData<Lead[]>(["leads"], (old) => {
+            if (!old) return old;
+            return old.map((l) => (l.id === lead.id ? { ...l, ...lead } : l));
+          });
         }
       }
 

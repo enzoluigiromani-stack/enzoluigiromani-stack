@@ -19,9 +19,13 @@ export interface TaskCreate {
 }
 
 export const tasksService = {
-  async getTasks(status?: string): Promise<Task[]> {
+  async getTasks(status?: string, leadId?: number): Promise<Task[]> {
     const { data } = await api.get<PaginatedTasks>("/tasks/", {
-      params: { ...(status ? { status } : {}), limit: 200 },
+      params: {
+        ...(status ? { status } : {}),
+        ...(leadId ? { lead_id: leadId } : {}),
+        limit: 200,
+      },
     });
     return data.items;
   },

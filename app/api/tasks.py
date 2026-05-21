@@ -25,7 +25,7 @@ _PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 def _build_query(
     db, workspace_id, user, status, priority,
     due_today, overdue_only, assigned_user_id,
-    due_date_from=None, due_date_to=None,
+    due_date_from=None, due_date_to=None, lead_id=None,
 ):
     query = db.query(Task).filter(Task.workspace_id == workspace_id)
     if user.role == "sales":
@@ -45,6 +45,8 @@ def _build_query(
         query = query.filter(Task.due_date <= due_date_to)
     if assigned_user_id:
         query = query.filter(Task.assigned_user_id == assigned_user_id)
+    if lead_id:
+        query = query.filter(Task.lead_id == lead_id)
     return query
 
 
@@ -142,6 +144,7 @@ def list_tasks(
     due_today: bool = Query(False),
     overdue_only: bool = Query(False),
     assigned_user_id: int = Query(None),
+    lead_id: int = Query(None),
     due_date_from: datetime = Query(None, description="ISO datetime — para filtro de calendário"),
     due_date_to: datetime = Query(None, description="ISO datetime — para filtro de calendário"),
     db: Session = Depends(get_db),
@@ -152,7 +155,7 @@ def list_tasks(
     query = _build_query(
         db, workspace.id, current_user,
         status, priority, due_today, overdue_only, assigned_user_id,
-        due_date_from=due_date_from, due_date_to=due_date_to,
+        due_date_from=due_date_from, due_date_to=due_date_to, lead_id=lead_id,
     )
     total = query.count()
     items = (

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Plus, Search, User, DollarSign, Filter } from "lucide-react";
+import { Plus, Search, User, DollarSign, Filter, RefreshCw, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,8 +25,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { leadsService } from "@/services/leads.service";
+import { realtimeClient } from "@/services/websocket.service";
+import { useRealtimeStatus } from "@/hooks/use-realtime";
 import type { Lead, LeadCreate, Stage } from "@/types";
 import { api } from "@/services/api";
+import { cn } from "@/lib/utils";
 
 const STATUS_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
   active: { label: "Ativo", variant: "default" },
@@ -34,6 +37,71 @@ const STATUS_BADGE: Record<string, { label: string; variant: "default" | "second
   lost: { label: "Perdido", variant: "destructive" },
   inactive: { label: "Inativo", variant: "outline" },
 };
+
+const HIGHLIGHT_TTL = 4000;
+
+// ── Flash hook ────────────────────────────────────────────────────────────────
+
+function useLeadFlash() {
+  const [flashIds, setFlashIds] = useState<Set<number>>(new Set());
+  const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
+  const flash = useCallback((id: number) => {
+    setFlashIds((prev) => new Set(prev).add(id));
+    if (timers.current.has(id)) clearTimeout(timers.current.get(id));
+    timers.current.set(
+      id,
+      setTimeout(() => {
+        setFlashIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+        timers.current.delete(id);
+      }, HIGHLIGHT_TTL),
+    );
+  }, []);
+
+  useEffect(() => {
+    const off = realtimeClient.on((event) => {
+      if (event.channel !== "pipeline_updates") return;
+      if (event.event === "lead.created") flash((event.payload as Lead).id);
+      if (event.event === "lead.updated") flash((event.payload as Lead).id);
+      if (event.event === "lead.moved") flash((event.payload as { lead_id: number }).lead_id);
+    });
+    return off;
+  }, [flash]);
+
+  return flashIds;
+}
+
+// ── Live badge ─────────────────────────────────────────────────────────────────
+
+function LiveBadge() {
+  const status = useRealtimeStatus();
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-all",
+      status === "connected"
+        ? "text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20"
+        : status === "connecting"
+        ? "text-amber-500 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20"
+        : "text-muted-foreground border-border bg-muted/40",
+    )}>
+      {status === "connected" ? (
+        <>
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+          </span>
+          Ao vivo
+        </>
+      ) : status === "connecting" ? (
+        <><RefreshCw className="h-3 w-3 animate-spin" /> Conectando…</>
+      ) : (
+        <><WifiOff className="h-3 w-3" /> Offline</>
+      )}
+    </span>
+  );
+}
+
+// ── Create dialog ─────────────────────────────────────────────────────────────
 
 function CreateLeadDialog({ stages }: { stages: Stage[] }) {
   const queryClient = useQueryClient();
@@ -161,14 +229,18 @@ function CreateLeadDialog({ stages }: { stages: Stage[] }) {
   );
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function LeadsPage() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const flashIds = useLeadFlash();
 
   const { data: leads = [], isLoading } = useQuery<Lead[]>({
     queryKey: ["leads"],
     queryFn: leadsService.getLeads,
+    staleTime: 30_000,
   });
 
   const { data: board = [] } = useQuery({
@@ -208,7 +280,10 @@ export default function LeadsPage() {
             {leads.length} leads no total
           </p>
         </div>
-        <CreateLeadDialog stages={allStages} />
+        <div className="flex items-center gap-3">
+          <LiveBadge />
+          <CreateLeadDialog stages={allStages} />
+        </div>
       </div>
 
       {/* Filters */}
@@ -271,26 +346,40 @@ export default function LeadsPage() {
             <TableBody>
               {filtered.map((lead) => {
                 const statusInfo = STATUS_BADGE[lead.status] ?? { label: lead.status, variant: "outline" as const };
+                const isFlashing = flashIds.has(lead.id);
                 return (
                   <TableRow
                     key={lead.id}
-                    className="cursor-pointer"
+                    className={cn(
+                      "cursor-pointer transition-colors duration-700",
+                      isFlashing && "bg-primary/5",
+                    )}
                     onClick={() => router.push(`/leads/${lead.id}`)}
                   >
                     <TableCell>
-                      <div className="font-medium">{lead.name}</div>
-                      {lead.tags && lead.tags.length > 0 && (
-                        <div className="flex gap-1 mt-1">
-                          {lead.tags.slice(0, 2).map((tag) => (
-                            <span
-                              key={tag}
-                              className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium"
-                            >
-                              {tag}
-                            </span>
-                          ))}
+                      <div className="flex items-center gap-2">
+                        {isFlashing && (
+                          <span className="relative flex h-1.5 w-1.5 shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
+                          </span>
+                        )}
+                        <div>
+                          <div className="font-medium">{lead.name}</div>
+                          {lead.tags && lead.tags.length > 0 && (
+                            <div className="flex gap-1 mt-1">
+                              {lead.tags.slice(0, 2).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {lead.company ?? "—"}
