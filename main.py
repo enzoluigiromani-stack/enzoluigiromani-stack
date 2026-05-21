@@ -25,8 +25,11 @@ from app.api import activities, tasks, lead_capture, inbox, analytics, notificat
 from app.websocket.router import router as ws_router
 
 
-def _drop_stale_tables():
-    """Descarta tabelas sem workspace_id na primeira migração multi-tenant."""
+def _sqlite_migrations():
+    """Aplica migrações incrementais — apenas para SQLite (dev local)."""
+    from app.database.database import DATABASE_URL as _url
+    if not _url.startswith("sqlite"):
+        return
     with engine.connect() as conn:
         tables = {r[0] for r in conn.execute(text(
             "SELECT name FROM sqlite_master WHERE type='table'"
@@ -35,12 +38,7 @@ def _drop_stale_tables():
             conn.execute(text("DROP TABLE IF EXISTS leads"))
             conn.execute(text("DROP TABLE IF EXISTS pipeline_stages"))
             conn.commit()
-            logging.info("Tabelas stale descartadas para migração multi-tenant.")
 
-
-def _migrate_columns():
-    """Adiciona colunas ausentes em instalações pré-existentes."""
-    with engine.connect() as conn:
         user_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(users)"))}
         for col, ddl in [
             ("workspace_id", "INTEGER REFERENCES workspaces(id)"),
@@ -80,9 +78,8 @@ def _migrate_columns():
             conn.commit()
 
 
-_drop_stale_tables()
 Base.metadata.create_all(bind=engine)
-_migrate_columns()
+_sqlite_migrations()
 
 app = FastAPI(
     title="CRM API",
@@ -90,9 +87,17 @@ app = FastAPI(
     version="5.0.0",
 )
 
+import os as _os
+_frontend_url = _os.getenv("FRONTEND_URL", "")
+_origins = list(filter(None, [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    _frontend_url,
+]))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: crm-api
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: crm-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "60"
+      - key: NOTIFICATIONS_SANDBOX
+        value: "true"
+      - key: FRONTEND_URL
+        sync: false   # preencher com a URL do Vercel após o deploy do frontend
+
+databases:
+  - name: crm-db
+    databaseName: crm
+    user: crm
+    plan: free
+    region: oregon
