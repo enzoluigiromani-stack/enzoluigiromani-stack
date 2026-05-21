@@ -126,14 +126,16 @@ export interface Task {
   id: number;
   workspace_id: number;
   lead_id?: number;
-  assigned_to?: number;
+  assigned_user_id?: number;
   title: string;
   description?: string;
-  status: "pending" | "in_progress" | "completed" | "cancelled";
+  status: "pending" | "overdue" | "completed";
   priority: "low" | "medium" | "high";
   due_date?: string;
   completed_at?: string;
   created_at: string;
+  lead_name?: string;
+  assigned_user_name?: string;
 }
 
 export interface TaskSummary {

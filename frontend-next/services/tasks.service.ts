@@ -1,21 +1,29 @@
 import { api } from "./api";
 import type { Task, TaskSummary } from "@/types";
 
+interface PaginatedTasks {
+  items: Task[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
 export interface TaskCreate {
   title: string;
   description?: string;
   lead_id?: number;
-  assigned_to?: number;
+  assigned_user_id?: number;
   priority?: "low" | "medium" | "high";
   due_date?: string;
 }
 
 export const tasksService = {
   async getTasks(status?: string): Promise<Task[]> {
-    const { data } = await api.get<Task[]>("/tasks/", {
-      params: status ? { status } : {},
+    const { data } = await api.get<PaginatedTasks>("/tasks/", {
+      params: { ...(status ? { status } : {}), limit: 200 },
     });
-    return data;
+    return data.items;
   },
 
   async createTask(payload: TaskCreate): Promise<Task> {
@@ -23,8 +31,13 @@ export const tasksService = {
     return data;
   },
 
-  async updateTask(id: number, payload: Partial<Task>): Promise<Task> {
-    const { data } = await api.patch<Task>(`/tasks/${id}`, payload);
+  async completeTask(id: number): Promise<Task> {
+    const { data } = await api.patch<Task>(`/tasks/${id}/complete`);
+    return data;
+  },
+
+  async updateStatus(id: number, status: Task["status"]): Promise<Task> {
+    const { data } = await api.patch<Task>(`/tasks/${id}/status`, { status });
     return data;
   },
 
