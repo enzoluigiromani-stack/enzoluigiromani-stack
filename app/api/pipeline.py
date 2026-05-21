@@ -9,7 +9,7 @@ from app.models.pipeline_stage import PipelineStage
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.lead import LeadResponse
-from app.schemas.pipeline_stage import PipelineStageCreate, PipelineStageResponse
+from app.schemas.pipeline_stage import PipelineStageCreate, PipelineStageUpdate, PipelineStageResponse
 from app.services.activity_service import log_activity
 from app.services.permissions import require_manager, require_sales
 from app.services.workspace import require_workspace
@@ -58,6 +58,51 @@ def create_stage(
         meta={"stage_name": db_stage.name, "color": db_stage.color},
     )
     return db_stage
+
+
+@router.put("/stages/{stage_id}", response_model=PipelineStageResponse)
+def update_stage(
+    stage_id: int,
+    stage_data: PipelineStageUpdate,
+    db: Session = Depends(get_db),
+    workspace: Workspace = Depends(require_workspace),
+    user: User = Depends(require_manager),
+):
+    stage = (
+        db.query(PipelineStage)
+        .filter(PipelineStage.id == stage_id, PipelineStage.workspace_id == workspace.id)
+        .first()
+    )
+    if not stage:
+        raise HTTPException(status_code=404, detail="Estágio não encontrado")
+
+    for field, value in stage_data.model_dump(exclude_unset=True).items():
+        setattr(stage, field, value)
+
+    db.commit()
+    db.refresh(stage)
+    return stage
+
+
+@router.delete("/stages/{stage_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_stage(
+    stage_id: int,
+    db: Session = Depends(get_db),
+    workspace: Workspace = Depends(require_workspace),
+    _: User = Depends(require_manager),
+):
+    stage = (
+        db.query(PipelineStage)
+        .filter(PipelineStage.id == stage_id, PipelineStage.workspace_id == workspace.id)
+        .first()
+    )
+    if not stage:
+        raise HTTPException(status_code=404, detail="Estágio não encontrado")
+
+    # Desvincula leads antes de excluir o estágio
+    db.query(Lead).filter(Lead.stage_id == stage_id).update({"stage_id": None})
+    db.delete(stage)
+    db.commit()
 
 
 @router.get("/board")

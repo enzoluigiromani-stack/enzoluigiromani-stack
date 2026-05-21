@@ -8,6 +8,12 @@ class PipelineStageCreate(BaseModel):
     color: Optional[str] = None
 
 
+class PipelineStageUpdate(BaseModel):
+    name: Optional[str] = None
+    order: Optional[int] = None
+    color: Optional[str] = None
+
+
 class PipelineStageResponse(BaseModel):
     id: int
     name: str
