@@ -10,10 +10,11 @@ import { authService } from "@/services/auth.service";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { token, user, setUser, logout } = useAuthStore();
+  const { token, user, setUser, logout, _hasHydrated } = useAuthStore();
   const { darkMode } = useUIStore();
 
   useEffect(() => {
+    if (!_hasHydrated) return;
     if (!token) {
       router.push("/login");
       return;
@@ -24,7 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         router.push("/login");
       });
     }
-  }, [token, user, router, setUser, logout]);
+  }, [token, user, router, setUser, logout, _hasHydrated]);
 
   useEffect(() => {
     if (darkMode) {
@@ -34,6 +35,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [darkMode]);
 
+  if (!_hasHydrated) return null;
   if (!token) return null;
 
   return (

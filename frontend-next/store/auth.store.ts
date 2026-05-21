@@ -5,6 +5,8 @@ import type { User } from "@/types";
 interface AuthState {
   token: string | null;
   user: User | null;
+  _hasHydrated: boolean;
+  setHasHydrated: (v: boolean) => void;
   setToken: (token: string) => void;
   setUser: (user: User) => void;
   logout: () => void;
@@ -15,6 +17,8 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       token: null,
       user: null,
+      _hasHydrated: false,
+      setHasHydrated: (v) => set({ _hasHydrated: v }),
       setToken: (token) => {
         set({ token });
         if (typeof window !== "undefined") localStorage.setItem("crm_token", token);
@@ -25,6 +29,11 @@ export const useAuthStore = create<AuthState>()(
         if (typeof window !== "undefined") localStorage.removeItem("crm_token");
       },
     }),
-    { name: "crm-auth" }
+    {
+      name: "crm-auth",
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
+    }
   )
 );
