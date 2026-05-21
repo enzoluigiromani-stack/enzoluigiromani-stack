@@ -121,34 +121,54 @@ export function RealtimeSync() {
 
       // ── Inbox → message + conversation caches ───────────────────────────
       if (event.channel === "inbox_updates") {
-        const { conversation_id, message } = event.payload as {
-          conversation_id: number;
-          message: Message;
-        };
-
-        // Append to message cache if it's already loaded
-        queryClient.setQueryData<Message[]>(
-          ["messages", conversation_id],
-          (old) => {
-            if (!old) return old;
-            if (old.some((m) => m.id === message.id)) return old;
-            return [...old.filter((m) => !m._optimistic), message];
-          },
-        );
-
-        // Bump last_message_at and re-sort conversations list
-        queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) => {
-          const updated = old.map((c) =>
-            c.id === conversation_id
-              ? { ...c, last_message_at: message.created_at }
-              : c,
-          );
-          return [...updated].sort((a, b) => {
-            const at = a.last_message_at ?? a.created_at;
-            const bt = b.last_message_at ?? b.created_at;
-            return new Date(bt).getTime() - new Date(at).getTime();
+        // New conversation opened by another user
+        if (event.event === "conversation.created") {
+          const conv = event.payload as Conversation;
+          queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) => {
+            if (old.some((c) => c.id === conv.id)) return old;
+            return [conv, ...old];
           });
-        });
+        }
+
+        // Conversation closed or reassigned
+        if (event.event === "conversation.updated") {
+          const conv = event.payload as Conversation;
+          queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) =>
+            old.map((c) => (c.id === conv.id ? { ...c, ...conv } : c)),
+          );
+        }
+
+        // Incoming message
+        if (event.event === "message.sent" || event.event === "message.received") {
+          const { conversation_id, message } = event.payload as {
+            conversation_id: number;
+            message: Message;
+          };
+
+          // Append to message cache if it's already loaded
+          queryClient.setQueryData<Message[]>(
+            ["messages", conversation_id],
+            (old) => {
+              if (!old) return old;
+              if (old.some((m) => m.id === message.id)) return old;
+              return [...old.filter((m) => !m._optimistic), message];
+            },
+          );
+
+          // Bump last_message_at and re-sort conversations list
+          queryClient.setQueryData<Conversation[]>(["conversations"], (old = []) => {
+            const updated = old.map((c) =>
+              c.id === conversation_id
+                ? { ...c, last_message_at: message.created_at }
+                : c,
+            );
+            return [...updated].sort((a, b) => {
+              const at = a.last_message_at ?? a.created_at;
+              const bt = b.last_message_at ?? b.created_at;
+              return new Date(bt).getTime() - new Date(at).getTime();
+            });
+          });
+        }
       }
     });
 

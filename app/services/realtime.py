@@ -46,6 +46,14 @@ def broadcast_task_updated(workspace_id: int, task: dict):
     _run(manager.broadcast_workspace(workspace_id, channels.task_updated_event(task)))
 
 
+def broadcast_conversation_created(workspace_id: int, conversation: dict):
+    _run(manager.broadcast_workspace(workspace_id, channels.conversation_created_event(conversation)))
+
+
+def broadcast_conversation_updated(workspace_id: int, conversation: dict):
+    _run(manager.broadcast_workspace(workspace_id, channels.conversation_updated_event(conversation)))
+
+
 def broadcast_message_sent(workspace_id: int, conversation_id: int, message: dict):
     _run(manager.broadcast_workspace(
         workspace_id,

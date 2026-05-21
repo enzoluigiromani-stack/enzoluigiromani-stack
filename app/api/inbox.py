@@ -18,6 +18,7 @@ import math
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
@@ -43,6 +44,7 @@ router = APIRouter(prefix="/inbox", tags=["inbox"])
 @router.post("/conversations", response_model=ConversationResponse, status_code=201)
 def create_conversation(
     body: ConversationCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_sales),
     workspace: Workspace = Depends(require_workspace),
@@ -62,7 +64,13 @@ def create_conversation(
         assigned_user_id = body.assigned_user_id,
         user_id          = current_user.id,
     )
-    return conv
+    r = ConversationResponse.model_validate(conv)
+    if conv.lead:
+        r.lead_name  = conv.lead.name
+        r.lead_email = conv.lead.email
+        r.lead_phone = conv.lead.phone
+    background_tasks.add_task(realtime.broadcast_conversation_created, workspace.id, jsonable_encoder(r))
+    return r
 
 
 @router.get("/conversations", response_model=PaginatedConversations)
@@ -126,20 +134,29 @@ def get_conversation(
 def update_conversation(
     conversation_id: int,
     body: ConversationUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_manager),
     workspace: Workspace = Depends(require_workspace),
 ):
     """Fechar conversa ou reatribuir a outro usuário (manager+)."""
+    conv = None
     if body.status == "closed":
-        return inbox_service.close_conversation(db, conversation_id, workspace.id, current_user.id)
-
-    if body.assigned_user_id is not None:
-        return inbox_service.assign_conversation(
+        conv = inbox_service.close_conversation(db, conversation_id, workspace.id, current_user.id)
+    elif body.assigned_user_id is not None:
+        conv = inbox_service.assign_conversation(
             db, conversation_id, workspace.id, body.assigned_user_id, current_user.id
         )
+    else:
+        raise HTTPException(status_code=422, detail="Nenhuma ação válida fornecida (status ou assigned_user_id).")
 
-    raise HTTPException(status_code=422, detail="Nenhuma ação válida fornecida (status ou assigned_user_id).")
+    r = ConversationResponse.model_validate(conv)
+    if conv.lead:
+        r.lead_name  = conv.lead.name
+        r.lead_email = conv.lead.email
+        r.lead_phone = conv.lead.phone
+    background_tasks.add_task(realtime.broadcast_conversation_updated, workspace.id, jsonable_encoder(r))
+    return r
 
 
 # ── Mensagens ─────────────────────────────────────────────────────────────────

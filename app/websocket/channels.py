@@ -62,6 +62,15 @@ def notification_event(notification: dict) -> dict:
     return make_event(NOTIFICATIONS, "notification.new", notification)
 
 
+# Inbox conversation-level events
+def conversation_created_event(conversation: dict) -> dict:
+    return make_event(INBOX_UPDATES, "conversation.created", conversation)
+
+
+def conversation_updated_event(conversation: dict) -> dict:
+    return make_event(INBOX_UPDATES, "conversation.updated", conversation)
+
+
 # Settings channel events
 def stage_created_event(stage: dict) -> dict:
     return make_event(SETTINGS_UPDATES, "stage.created", stage)

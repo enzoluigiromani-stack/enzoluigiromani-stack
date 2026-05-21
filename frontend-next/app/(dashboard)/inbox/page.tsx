@@ -76,11 +76,13 @@ function ConversationItem({
   conversation,
   selected,
   unread,
+  flashing,
   onClick,
 }: {
   conversation: Conversation;
   selected: boolean;
   unread: boolean;
+  flashing: boolean;
   onClick: () => void;
 }) {
   const channel = CHANNEL_CONFIG[conversation.channel as keyof typeof CHANNEL_CONFIG] ?? CHANNEL_CONFIG.email;
@@ -90,8 +92,12 @@ function ConversationItem({
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left p-3 rounded-lg transition-colors relative",
-        selected ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50",
+        "w-full text-left p-3 rounded-lg transition-all duration-500 relative",
+        selected
+          ? "bg-primary/10 border border-primary/20"
+          : flashing
+          ? "bg-primary/5 border border-primary/15"
+          : "hover:bg-muted/50 border border-transparent",
       )}
     >
       {unread && (
@@ -324,7 +330,7 @@ export default function InboxPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"open" | "closed" | "">("open");
 
-  const { conversations, isLoading, unreadIds, markRead } = useInbox(selectedId);
+  const { conversations, isLoading, unreadIds, flashConvIds, markRead } = useInbox(selectedId);
 
   const filtered = conversations.filter((c) => {
     const matchSearch =
@@ -417,6 +423,7 @@ export default function InboxPage() {
                 conversation={conv}
                 selected={conv.id === selectedId}
                 unread={unreadIds.has(conv.id)}
+                flashing={flashConvIds.has(conv.id)}
                 onClick={() => selectConversation(conv.id)}
               />
             ))
