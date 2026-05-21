@@ -167,7 +167,12 @@ export interface Message {
   sender_id?: number;
   content: string;
   message_type: "text" | "image" | "file";
+  external_message_id?: string;
+  meta?: Record<string, unknown>;
   created_at: string;
+  delivered_at?: string;
+  read_at?: string;
+  _optimistic?: boolean;
 }
 
 // Workspace Integrations
