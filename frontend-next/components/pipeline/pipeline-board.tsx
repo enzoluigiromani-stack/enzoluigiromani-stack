@@ -77,6 +77,7 @@ export function PipelineBoard() {
     totalValue,
     wonLeads,
     flashIds,
+    flashStageIds,
   } = usePipeline();
 
   const [activeCard, setActiveCard] = useState<ActiveCard | null>(null);
@@ -182,6 +183,7 @@ export function PipelineBoard() {
               column={column}
               isAnyDragging={!!activeCard}
               flashIds={flashIds}
+              isStageFlashing={flashStageIds.has(column.stage.id)}
             />
           ))}
         </div>

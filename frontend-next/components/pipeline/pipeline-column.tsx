@@ -12,9 +12,10 @@ interface PipelineColumnProps {
   column: KanbanColumn;
   isAnyDragging: boolean;
   flashIds?: Set<number>;
+  isStageFlashing?: boolean;
 }
 
-export function PipelineColumn({ column, isAnyDragging, flashIds }: PipelineColumnProps) {
+export function PipelineColumn({ column, isAnyDragging, flashIds, isStageFlashing = false }: PipelineColumnProps) {
   const { stage, leads } = column;
   const { setNodeRef, isOver } = useDroppable({ id: `col-${stage.id}` });
 
@@ -37,10 +38,16 @@ export function PipelineColumn({ column, isAnyDragging, flashIds }: PipelineColu
       className="flex flex-col w-[272px] shrink-0"
     >
       {/* Cabeçalho da coluna */}
-      <div className="flex items-center justify-between mb-3 px-1">
+      <div className={cn(
+        "flex items-center justify-between mb-3 px-1 py-1 rounded-lg transition-all duration-700",
+        isStageFlashing && "bg-primary/8 ring-1 ring-primary/30",
+      )}>
         <div className="flex items-center gap-2 min-w-0">
           <div
-            className="h-2.5 w-2.5 rounded-full shrink-0"
+            className={cn(
+              "h-2.5 w-2.5 rounded-full shrink-0 transition-all duration-500",
+              isStageFlashing && "ring-2 ring-offset-1 ring-primary/50",
+            )}
             style={{ backgroundColor: stage.color ?? "#6366f1" }}
           />
           <span className="text-sm font-semibold truncate">{stage.name}</span>
