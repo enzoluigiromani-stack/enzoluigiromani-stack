@@ -11,7 +11,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { realtimeClient } from "@/services/websocket.service";
 import { BOARD_QUERY_KEY } from "@/hooks/use-pipeline";
-import type { KanbanColumn, Lead, Task, Message, Conversation } from "@/types";
+import type { KanbanColumn, Lead, Task, Message, Conversation, Stage, WorkspaceMember } from "@/types";
 
 export function RealtimeSync() {
   const queryClient = useQueryClient();
@@ -149,6 +149,78 @@ export function RealtimeSync() {
             return new Date(bt).getTime() - new Date(at).getTime();
           });
         });
+      }
+    });
+
+      // ── Settings → stages + team-members caches ─────────────────────────
+      if (event.channel === "settings_updates") {
+        if (event.event === "stage.created") {
+          const stage = event.payload as Stage;
+          queryClient.setQueryData<Stage[]>(["stages"], (old) => {
+            if (!old) return old;
+            if (old.some((s) => s.id === stage.id)) return old;
+            return [...old, stage].sort((a, b) => a.order - b.order);
+          });
+          // Add new empty column to board
+          queryClient.setQueryData<KanbanColumn[]>(BOARD_QUERY_KEY, (old) => {
+            if (!old) return old;
+            if (old.some((col) => col.stage.id === stage.id)) return old;
+            return [...old, { stage, leads: [] }].sort(
+              (a, b) => a.stage.order - b.stage.order,
+            );
+          });
+        }
+
+        if (event.event === "stage.updated") {
+          const stage = event.payload as Stage;
+          queryClient.setQueryData<Stage[]>(["stages"], (old) => {
+            if (!old) return old;
+            return old
+              .map((s) => (s.id === stage.id ? { ...s, ...stage } : s))
+              .sort((a, b) => a.order - b.order);
+          });
+          queryClient.setQueryData<KanbanColumn[]>(BOARD_QUERY_KEY, (old) => {
+            if (!old) return old;
+            return old
+              .map((col) =>
+                col.stage.id === stage.id ? { ...col, stage: { ...col.stage, ...stage } } : col,
+              )
+              .sort((a, b) => a.stage.order - b.stage.order);
+          });
+        }
+
+        if (event.event === "stage.deleted") {
+          const { id } = event.payload as { id: number };
+          queryClient.setQueryData<Stage[]>(["stages"], (old) =>
+            old ? old.filter((s) => s.id !== id) : old,
+          );
+          // Leads in this stage had their stage_id nulled by the backend —
+          // invalidate board so they don't stay orphaned in the column
+          queryClient.invalidateQueries({ queryKey: BOARD_QUERY_KEY });
+        }
+
+        if (event.event === "member.invited") {
+          const member = event.payload as WorkspaceMember;
+          queryClient.setQueryData<WorkspaceMember[]>(["team-members"], (old) => {
+            if (!old) return old;
+            if (old.some((m) => m.id === member.id)) return old;
+            return [...old, member];
+          });
+        }
+
+        if (event.event === "member.updated") {
+          const member = event.payload as WorkspaceMember;
+          queryClient.setQueryData<WorkspaceMember[]>(["team-members"], (old) =>
+            old ? old.map((m) => (m.id === member.id ? { ...m, ...member } : m)) : old,
+          );
+        }
+
+        if (event.event === "member.removed") {
+          const { id } = event.payload as { id: number };
+          queryClient.setQueryData<WorkspaceMember[]>(["team-members"], (old) =>
+            old ? old.filter((m) => m.id !== id) : old,
+          );
+        }
       }
     });
 

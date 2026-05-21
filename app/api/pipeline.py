@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from app.schemas.pipeline_stage import PipelineStageCreate, PipelineStageUpdate,
 from app.services.activity_service import log_activity
 from app.services.permissions import require_manager, require_sales
 from app.services.workspace import require_workspace
+from app.services import realtime
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
@@ -34,9 +35,10 @@ def list_stages(
 @router.post("/stages", response_model=PipelineStageResponse, status_code=status.HTTP_201_CREATED)
 def create_stage(
     stage: PipelineStageCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
-    _: User = Depends(require_manager),
+    user: User = Depends(require_manager),
 ):
     if (
         db.query(PipelineStage)
@@ -54,9 +56,11 @@ def create_stage(
         workspace_id=workspace.id,
         type="stage_created",
         description=f"Etapa criada: {db_stage.name}",
-        user_id=_.id,
+        user_id=user.id,
         meta={"stage_name": db_stage.name, "color": db_stage.color},
     )
+    stage_dict = jsonable_encoder(PipelineStageResponse.model_validate(db_stage))
+    background_tasks.add_task(realtime.broadcast_stage_created, workspace.id, stage_dict)
     return db_stage
 
 
@@ -64,6 +68,7 @@ def create_stage(
 def update_stage(
     stage_id: int,
     stage_data: PipelineStageUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
     user: User = Depends(require_manager),
@@ -81,12 +86,15 @@ def update_stage(
 
     db.commit()
     db.refresh(stage)
+    stage_dict = jsonable_encoder(PipelineStageResponse.model_validate(stage))
+    background_tasks.add_task(realtime.broadcast_stage_updated, workspace.id, stage_dict)
     return stage
 
 
 @router.delete("/stages/{stage_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_stage(
     stage_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
     _: User = Depends(require_manager),
@@ -103,6 +111,7 @@ def delete_stage(
     db.query(Lead).filter(Lead.stage_id == stage_id).update({"stage_id": None})
     db.delete(stage)
     db.commit()
+    background_tasks.add_task(realtime.broadcast_stage_deleted, workspace.id, stage_id)
 
 
 @router.get("/board")

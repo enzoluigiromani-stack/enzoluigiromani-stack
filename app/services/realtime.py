@@ -66,3 +66,27 @@ def broadcast_notification(workspace_id: int, notification: dict, user_id: int |
         _run(manager.broadcast_user(user_id, event))
     else:
         _run(manager.broadcast_workspace(workspace_id, event))
+
+
+def broadcast_stage_created(workspace_id: int, stage: dict):
+    _run(manager.broadcast_workspace(workspace_id, channels.stage_created_event(stage)))
+
+
+def broadcast_stage_updated(workspace_id: int, stage: dict):
+    _run(manager.broadcast_workspace(workspace_id, channels.stage_updated_event(stage)))
+
+
+def broadcast_stage_deleted(workspace_id: int, stage_id: int):
+    _run(manager.broadcast_workspace(workspace_id, channels.stage_deleted_event(stage_id)))
+
+
+def broadcast_member_invited(workspace_id: int, member: dict):
+    _run(manager.broadcast_workspace(workspace_id, channels.member_invited_event(member)))
+
+
+def broadcast_member_updated(workspace_id: int, member: dict):
+    _run(manager.broadcast_workspace(workspace_id, channels.member_updated_event(member)))
+
+
+def broadcast_member_removed(workspace_id: int, member_id: int):
+    _run(manager.broadcast_workspace(workspace_id, channels.member_removed_event(member_id)))

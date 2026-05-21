@@ -1,5 +1,6 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
@@ -14,6 +15,7 @@ from app.schemas.workspace_integrations import WorkspaceIntegrationsResponse, Wo
 from app.services.auth import hash_password
 from app.services.permissions import require_admin, require_manager, require_sales
 from app.services.workspace import require_workspace
+from app.services import realtime
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
@@ -81,6 +83,7 @@ def list_users(
 @router.post("/invite", response_model=UserResponse, status_code=201)
 def invite_user(
     data: UserInvite,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
     _: User = Depends(require_admin),
@@ -101,6 +104,8 @@ def invite_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    member_dict = jsonable_encoder(UserResponse.model_validate(user))
+    background_tasks.add_task(realtime.broadcast_member_invited, workspace.id, member_dict)
     return user
 
 
@@ -108,6 +113,7 @@ def invite_user(
 def update_user(
     user_id: int,
     data: UserRoleUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
     current_user: User = Depends(require_admin),
@@ -132,12 +138,15 @@ def update_user(
 
     db.commit()
     db.refresh(user)
+    member_dict = jsonable_encoder(UserResponse.model_validate(user))
+    background_tasks.add_task(realtime.broadcast_member_updated, workspace.id, member_dict)
     return user
 
 
 @router.delete("/users/{user_id}", status_code=204)
 def remove_user(
     user_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
     current_user: User = Depends(require_admin),
@@ -154,6 +163,7 @@ def remove_user(
 
     db.delete(user)
     db.commit()
+    background_tasks.add_task(realtime.broadcast_member_removed, workspace.id, user_id)
 
 
 # ── Integrations ──────────────────────────────────────────────────────────────

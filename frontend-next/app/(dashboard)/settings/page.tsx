@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Settings2, Kanban, Users, Plug, ShieldCheck, User, Lock, Palette } from "lucide-react";
+import { Settings2, Kanban, Users, Plug, ShieldCheck, User, Lock, Palette, RefreshCw, WifiOff } from "lucide-react";
 import { GeneralSection } from "@/components/settings/general-section";
 import { PipelineSection } from "@/components/settings/pipeline-section";
 import { TeamSection } from "@/components/settings/team-section";
@@ -10,7 +10,36 @@ import { IntegrationsSection } from "@/components/settings/integrations-section"
 import { AccountSection } from "@/components/settings/account-section";
 import { AppearanceSection } from "@/components/settings/appearance-section";
 import { useAuthStore } from "@/store/auth.store";
+import { useRealtimeStatus } from "@/hooks/use-realtime";
 import { cn } from "@/lib/utils";
+
+function LiveBadge() {
+  const status = useRealtimeStatus();
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-all",
+      status === "connected"
+        ? "text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20"
+        : status === "connecting"
+        ? "text-amber-500 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20"
+        : "text-muted-foreground border-border bg-muted/40",
+    )}>
+      {status === "connected" ? (
+        <>
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+          </span>
+          Ao vivo
+        </>
+      ) : status === "connecting" ? (
+        <><RefreshCw className="h-3 w-3 animate-spin" /> Conectando…</>
+      ) : (
+        <><WifiOff className="h-3 w-3" /> Offline</>
+      )}
+    </span>
+  );
+}
 
 type Tab = "geral" | "pipeline" | "equipe" | "integracoes" | "seguranca" | "aparencia" | "conta";
 
@@ -37,9 +66,12 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
-        <p className="text-muted-foreground">Gerencie o workspace e suas preferências</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
+          <p className="text-muted-foreground">Gerencie o workspace e suas preferências</p>
+        </div>
+        <LiveBadge />
       </div>
 
       <div className="flex gap-6">

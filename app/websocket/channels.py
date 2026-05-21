@@ -7,6 +7,7 @@ PIPELINE_UPDATES = "pipeline_updates"
 TASK_UPDATES = "task_updates"
 INBOX_UPDATES = "inbox_updates"
 NOTIFICATIONS = "notifications"
+SETTINGS_UPDATES = "settings_updates"
 
 
 def make_event(channel: str, event: str, payload: Any) -> dict:
@@ -59,3 +60,28 @@ def message_received_event(conversation_id: int, message: dict) -> dict:
 # Notification channel events
 def notification_event(notification: dict) -> dict:
     return make_event(NOTIFICATIONS, "notification.new", notification)
+
+
+# Settings channel events
+def stage_created_event(stage: dict) -> dict:
+    return make_event(SETTINGS_UPDATES, "stage.created", stage)
+
+
+def stage_updated_event(stage: dict) -> dict:
+    return make_event(SETTINGS_UPDATES, "stage.updated", stage)
+
+
+def stage_deleted_event(stage_id: int) -> dict:
+    return make_event(SETTINGS_UPDATES, "stage.deleted", {"id": stage_id})
+
+
+def member_invited_event(member: dict) -> dict:
+    return make_event(SETTINGS_UPDATES, "member.invited", member)
+
+
+def member_updated_event(member: dict) -> dict:
+    return make_event(SETTINGS_UPDATES, "member.updated", member)
+
+
+def member_removed_event(member_id: int) -> dict:
+    return make_event(SETTINGS_UPDATES, "member.removed", {"id": member_id})
