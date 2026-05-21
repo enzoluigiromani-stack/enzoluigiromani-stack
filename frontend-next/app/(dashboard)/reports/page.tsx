@@ -10,8 +10,12 @@ import {
   MessageSquare,
   CheckCircle2,
   AlertTriangle,
+  RefreshCw,
+  WifiOff,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { useRealtimeStatus } from "@/hooks/use-realtime";
+import { cn } from "@/lib/utils";
 import { MetricCard } from "@/components/analytics/metric-card";
 import { AnalyticsFiltersBar } from "@/components/analytics/analytics-filters";
 import { TimelineChart } from "@/components/analytics/timeline-chart";
@@ -28,6 +32,30 @@ import {
   useByUser,
 } from "@/hooks/use-analytics";
 import type { AnalyticsFilters } from "@/types/analytics";
+
+function LiveDot() {
+  const status = useRealtimeStatus();
+  return (
+    <span
+      title={status === "connected" ? "Ao vivo" : status === "connecting" ? "Conectando…" : "Offline"}
+      className={cn(
+        "flex items-center justify-center h-5 w-5 rounded-full transition-colors",
+        status === "connected" ? "text-emerald-500" : "text-muted-foreground/40",
+      )}
+    >
+      {status === "connected" ? (
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+        </span>
+      ) : status === "connecting" ? (
+        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <WifiOff className="h-3.5 w-3.5" />
+      )}
+    </span>
+  );
+}
 
 function defaultFilters(): AnalyticsFilters {
   const to = new Date();
@@ -57,13 +85,28 @@ export default function ReportsPage() {
     <div className="flex flex-col gap-6 p-6 max-w-[1400px] mx-auto">
 
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <BarChart2 className="h-6 w-6 text-primary" />
-        <div>
-          <h1 className="text-xl font-bold">Relatórios & Analytics</h1>
-          <p className="text-xs text-muted-foreground">
-            {ov?.period_label ?? "Carregando…"}
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <BarChart2 className="h-6 w-6 text-primary" />
+          <div>
+            <h1 className="text-xl font-bold">Relatórios & Analytics</h1>
+            <p className="text-xs text-muted-foreground">
+              {ov?.period_label ?? "Carregando…"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {overview.dataUpdatedAt > 0 && (
+            <span className="text-xs text-muted-foreground">
+              Atualizado às{" "}
+              {new Date(overview.dataUpdatedAt).toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })}
+            </span>
+          )}
+          <LiveDot />
         </div>
       </div>
 
