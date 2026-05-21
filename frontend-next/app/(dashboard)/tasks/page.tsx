@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Plus, CheckCircle2, Clock, AlertCircle, Circle, RefreshCw, WifiOff,
+  Plus, CheckCircle2, AlertCircle, Circle, RefreshCw, WifiOff,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";

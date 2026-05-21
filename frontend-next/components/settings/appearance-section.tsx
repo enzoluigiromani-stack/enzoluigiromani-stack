@@ -11,7 +11,7 @@ const PREVIEW_CLASSES = {
 };
 
 export function AppearanceSection() {
-  const { theme, resolvedTheme } = useTheme();
+  const { resolvedTheme } = useTheme();
 
   return (
     <div className="space-y-6">

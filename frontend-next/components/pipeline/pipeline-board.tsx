@@ -12,7 +12,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertCircle, RefreshCw, Inbox, Wifi, WifiOff } from "lucide-react";
+import { AlertCircle, RefreshCw, Inbox, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PipelineColumn } from "./pipeline-column";
 import { PipelineHeader } from "./pipeline-header";

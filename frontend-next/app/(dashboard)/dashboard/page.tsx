@@ -11,7 +11,6 @@ import {
   ArrowRight,
   ListChecks,
   Inbox,
-  Wifi,
   WifiOff,
   RefreshCw,
   Activity,
@@ -171,7 +170,7 @@ export default function DashboardPage() {
 
   const totalLeads = leads.length;
   const totalValue = leads.reduce((acc, l) => acc + (l.value ?? 0), 0);
-  const openConversations = 0; // placeholder — inbox query not loaded here
+
 
   return (
     <div className="space-y-6 animate-fade-in">
