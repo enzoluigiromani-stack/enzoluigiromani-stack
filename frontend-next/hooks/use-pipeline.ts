@@ -6,13 +6,12 @@ import type { KanbanColumn, Lead } from "@/types";
 
 export const BOARD_QUERY_KEY = ["board"] as const;
 
-// How long (ms) a card stays highlighted after arriving via WS
 const HIGHLIGHT_TTL = 4000;
 
 export function usePipeline() {
   const queryClient = useQueryClient();
 
-  // IDs of leads that just arrived / moved via realtime — used for card highlight
+  // Track IDs of leads that just arrived via WS for card highlight
   const [flashIds, setFlashIds] = useState<Set<number>>(new Set());
   const flashTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -36,66 +35,24 @@ export function usePipeline() {
     queryKey: BOARD_QUERY_KEY,
     queryFn: leadsService.getBoard,
     staleTime: 30_000,
-    // Longer fallback interval — WS handles live updates
     refetchInterval: 300_000,
   });
 
-  // ── Apply realtime events to the board cache ───────────────────────────────
+  // Flash highlights only — cache updates are handled by RealtimeSync provider
   useEffect(() => {
     const off = realtimeClient.on((event) => {
       if (event.channel !== "pipeline_updates") return;
-
       if (event.event === "lead.created") {
-        const lead = event.payload as Lead;
-        queryClient.setQueryData<KanbanColumn[]>(BOARD_QUERY_KEY, (old = []) => {
-          // Skip if already present (own optimistic insert or duplicate)
-          const exists = old.some((col) => col.leads.some((l) => l.id === lead.id));
-          if (exists) return old;
-
-          return old.map((col) =>
-            col.stage.id === lead.stage_id
-              ? { ...col, leads: [lead, ...col.leads] }
-              : col,
-          );
-        });
-        flash(lead.id);
+        flash((event.payload as Lead).id);
       }
-
       if (event.event === "lead.moved") {
-        const { lead_id, lead } = event.payload as {
-          lead_id: number;
-          from_stage: string;
-          to_stage: string;
-          lead: Lead;
-        };
-        queryClient.setQueryData<KanbanColumn[]>(BOARD_QUERY_KEY, (old = []) =>
-          old.map((col) => {
-            // Remove from every column first, then insert into target
-            const withoutLead = col.leads.filter((l) => l.id !== lead_id);
-            if (col.stage.id === lead.stage_id) {
-              return { ...col, leads: [lead, ...withoutLead] };
-            }
-            return { ...col, leads: withoutLead };
-          }),
-        );
-        flash(lead_id);
-      }
-
-      if (event.event === "lead.updated") {
-        const lead = event.payload as Lead;
-        queryClient.setQueryData<KanbanColumn[]>(BOARD_QUERY_KEY, (old = []) =>
-          old.map((col) => ({
-            ...col,
-            leads: col.leads.map((l) => (l.id === lead.id ? { ...l, ...lead } : l)),
-          })),
-        );
+        flash((event.payload as { lead_id: number }).lead_id);
       }
     });
-
     return off;
-  }, [queryClient, flash]);
+  }, [flash]);
 
-  // ── Drag-and-drop mutation with optimistic update ──────────────────────────
+  // Drag-and-drop mutation with optimistic update
   const moveMutation = useMutation({
     mutationFn: ({ leadId, stageId }: { leadId: number; stageId: number }) =>
       leadsService.moveLead(leadId, stageId),
@@ -110,7 +67,6 @@ export function usePipeline() {
         const targetColumn = old.find((c) => c.stage.id === stageId);
         if (!targetColumn) return old;
         const updatedLead: Lead = { ...lead, stage_id: stageId, stage: targetColumn.stage };
-
         return old.map((col) => {
           if (col.stage.id === stageId) {
             return { ...col, leads: [...col.leads.filter((l) => l.id !== leadId), updatedLead] };
