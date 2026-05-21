@@ -32,6 +32,8 @@ from app.services import inbox_service
 from app.services.channel_adapters import SUPPORTED_CHANNELS
 from app.services.permissions import require_manager, require_sales
 from app.services.workspace import require_workspace
+from app.services import realtime
+from app.services.notification_service import create_notification
 
 router = APIRouter(prefix="/inbox", tags=["inbox"])
 
@@ -176,6 +178,24 @@ def send_message(
         inbox_service.dispatch_message,
         message_id = msg.id,
         db_factory = get_db,
+    )
+
+    msg_dict = {
+        "id": msg.id,
+        "conversation_id": msg.conversation_id,
+        "sender_type": msg.sender_type,
+        "content": msg.content,
+        "message_type": msg.message_type,
+        "created_at": msg.created_at.isoformat(),
+    }
+    background_tasks.add_task(
+        realtime.broadcast_message_sent, workspace.id, msg.conversation_id, msg_dict
+    )
+    background_tasks.add_task(
+        create_notification, db, workspace.id,
+        "message_sent", "Mensagem enviada",
+        f"Conversa #{msg.conversation_id}",
+        current_user.id,
     )
 
     return msg

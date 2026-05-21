@@ -6,10 +6,14 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { useAuthStore } from "@/store/auth.store";
 import { authService } from "@/services/auth.service";
+import { useRealtime } from "@/hooks/use-realtime";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { token, user, setUser, logout, _hasHydrated } = useAuthStore();
+
+  // Start WebSocket connection for the authenticated workspace
+  useRealtime();
 
   useEffect(() => {
     if (!_hasHydrated) return;

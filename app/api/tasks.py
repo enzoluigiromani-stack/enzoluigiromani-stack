@@ -1,6 +1,6 @@
 import math
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
@@ -14,6 +14,8 @@ from app.services.task_service import (
     create_stale_reminders, serialize_task, sync_overdue,
 )
 from app.services.workspace import require_workspace
+from app.services import realtime
+from app.services.notification_service import create_notification
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -74,6 +76,7 @@ def task_summary(
 @router.post("/", response_model=TaskResponse, status_code=201)
 def create_task(
     data: TaskCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_sales),
     workspace: Workspace = Depends(require_workspace),
@@ -87,6 +90,13 @@ def create_task(
         description=f"Tarefa criada: {task.title}",
         user_id=current_user.id, lead_id=task.lead_id,
         meta={"priority": task.priority, "due_date": str(task.due_date)},
+    )
+    background_tasks.add_task(realtime.broadcast_task_created, workspace.id, serialize_task(task).model_dump(mode="json"))
+    background_tasks.add_task(
+        create_notification, db, workspace.id,
+        "task_created", f"Tarefa criada: {task.title}",
+        f"Prioridade: {task.priority}",
+        task.assigned_user_id,
     )
     return serialize_task(task)
 

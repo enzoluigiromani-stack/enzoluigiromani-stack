@@ -19,8 +19,10 @@ from app.models import lead_capture_event  # noqa: F401
 from app.models import conversation        # noqa: F401
 from app.models import message             # noqa: F401
 from app.models import workspace_integrations  # noqa: F401
+from app.models import notification            # noqa: F401
 from app.api import leads, webhook, pipeline, auth, workspace as workspace_router
-from app.api import activities, tasks, lead_capture, inbox, analytics
+from app.api import activities, tasks, lead_capture, inbox, analytics, notifications
+from app.websocket.router import router as ws_router
 
 
 def _drop_stale_tables():
@@ -106,6 +108,8 @@ app.include_router(lead_capture.router)
 app.include_router(inbox.router)
 app.include_router(pipeline.router)
 app.include_router(analytics.router)
+app.include_router(notifications.router)
+app.include_router(ws_router)
 
 
 @app.get("/")

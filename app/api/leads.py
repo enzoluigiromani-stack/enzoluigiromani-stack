@@ -15,6 +15,8 @@ from app.services.permissions import require_manager, require_sales
 from app.services.workspace import require_workspace
 from app.services.notifications import notify_new_lead, notify_lead_moved
 from app.services.task_service import create_followup_task
+from app.services import realtime
+from app.services.notification_service import create_notification
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -74,6 +76,13 @@ def create_lead(
 
     if criado:
         background_tasks.add_task(notify_new_lead, db_lead)
+        lead_dict = jsonable_encoder(LeadResponse.model_validate(db_lead))
+        background_tasks.add_task(realtime.broadcast_lead_created, workspace.id, lead_dict)
+        background_tasks.add_task(
+            create_notification, db, workspace.id,
+            "lead_created", f"Novo lead: {db_lead.name}",
+            f"Lead capturado via {db_lead.source or 'manual'}",
+        )
 
     return {"message": "Lead criado" if criado else "Lead atualizado",
             "lead": jsonable_encoder(LeadResponse.model_validate(db_lead))}
@@ -194,6 +203,16 @@ def move_lead(
         )
 
     background_tasks.add_task(notify_lead_moved, lead, stage.name)
+    lead_dict = jsonable_encoder(LeadResponse.model_validate(lead))
+    from_name = old_stage.name if old_stage else "?"
+    background_tasks.add_task(
+        realtime.broadcast_lead_moved, workspace.id, lead.id, from_name, stage.name, lead_dict
+    )
+    background_tasks.add_task(
+        create_notification, db, workspace.id,
+        "lead_moved", f"Lead movido: {lead.name}",
+        f"{from_name} → {stage.name}",
+    )
     return {"message": f"Lead movido para '{stage.name}'", "lead_id": lead_id,
             "stage": jsonable_encoder(stage)}
 
